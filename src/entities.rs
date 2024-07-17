@@ -1,0 +1,151 @@
+use std::collections::HashMap;
+
+use crate::components::*;
+
+use raylib::prelude::*;
+
+#[derive(Clone, Copy, Debug)]
+pub enum EntityIndex {
+    Triship(usize),
+    Projectile(usize),
+    Exhaust(usize),
+}
+
+pub enum Entity {
+    Triship(Triship),
+    Projectile(Projectile),
+    Exhaust(Particle),
+}
+
+pub struct EntityId<T> {
+    pub id: usize,
+    pub entity: T,
+}
+
+pub struct Entities {
+    pub triships: Vec<EntityId<Triship>>,
+    pub projectiles: Vec<EntityId<Projectile>>,
+    pub exhausts: Vec<EntityId<Particle>>,
+    id_map: HashMap<usize, EntityIndex>,
+    id_free: usize,
+}
+
+pub struct Triship {
+    pub life: f32,
+    pub body: Body<Triangle>,
+    pub motion: Motion,
+}
+
+pub struct Projectile {
+    pub damage: f32,
+    pub body: Body<Rectangle>,
+    pub motion: Motion,
+}
+
+pub struct Particle {
+    pub lifetime: u8,
+    pub body: Body<Vector2>,
+    pub motion: Motion,
+}
+
+impl Entities {
+    pub fn new() -> Self {
+        Self {
+            triships: Vec::new(),
+            projectiles: Vec::new(),
+            exhausts: Vec::new(),
+
+            id_map: HashMap::new(),
+            id_free: 0,
+        }
+    }
+
+    pub fn total(&self) -> usize {
+        self.triships.len() + self.projectiles.len() + self.exhausts.len()
+    }
+
+    pub fn add(&mut self, entity: Entity) -> usize {
+        let id = self.id_free;
+
+        self.id_free += 1;
+
+        let eidx = match entity {
+            Entity::Triship(entity) => {
+                self.triships.push(EntityId { id, entity });
+                EntityIndex::Triship(self.triships.len() - 1)
+            }
+            Entity::Projectile(entity) => {
+                self.projectiles.push(EntityId { id, entity });
+                EntityIndex::Projectile(self.projectiles.len() - 1)
+            }
+            Entity::Exhaust(entity) => {
+                self.exhausts.push(EntityId { id, entity });
+                EntityIndex::Exhaust(self.exhausts.len() - 1)
+            }
+        };
+
+        self.id_map.insert(id, eidx);
+
+        id
+    }
+
+    pub fn entity(&self, id: usize) -> Option<EntityIndex> {
+        match self.id_map.get(&id) {
+            Some(eidx) => Some(*eidx),
+            None => None,
+        }
+    }
+
+    pub fn kill(&mut self, id: usize) {
+        let map = &mut self.id_map;
+
+        if let Some(eidx) = map.get(&id) {
+            match eidx {
+                EntityIndex::Triship(idx) => swap_dead(&mut self.triships, map, *idx),
+                EntityIndex::Projectile(idx) => swap_dead(&mut self.projectiles, map, *idx),
+                EntityIndex::Exhaust(idx) => swap_dead(&mut self.exhausts, map, *idx),
+            }
+        }
+    }
+
+    pub fn centroid(&self, id: usize) -> Option<Generation<Vector2>> {
+        let Some(eidx) = self.entity(id) else {
+            return None;
+        };
+
+        let (old, new) = match eidx {
+            EntityIndex::Triship(idx) => {
+                let gen = &self.triships[idx].entity.body.generation;
+                (
+                    &gen.old.shape as &dyn Centroidable,
+                    &gen.new.shape as &dyn Centroidable,
+                )
+            }
+            _ => return None,
+        };
+
+        Some(Generation {
+            old: old.centroid(),
+            new: new.centroid(),
+        })
+    }
+}
+
+fn swap_dead<T>(
+    entities: &mut Vec<EntityId<T>>,
+    map: &mut HashMap<usize, EntityIndex>,
+    idx: usize,
+) {
+    // remove the dead entity and swap it with the last one
+    let dead = entities.swap_remove(idx);
+
+    let Some(dead_ref) = map.remove(&dead.id) else {
+        panic!("invalid map, missing id: {}", dead.id);
+    };
+
+    // update reference for the swapped entity
+    if let Some(swap) = entities.get_mut(idx) {
+        swap.id = dead.id;
+        map.insert(swap.id, dead_ref);
+    }
+}
