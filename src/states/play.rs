@@ -7,8 +7,7 @@ use crate::{
     commands::{Command, EntityCommands},
     components::Generation,
     constants::{
-        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH,
-        TICK_SKIP_INITIAL,
+        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH, TICK_SCHEDULED,
     },
     entities::{Entities, Entity},
     forge::Forge,
@@ -18,7 +17,7 @@ use crate::{
 };
 
 pub struct Play {
-    tick: usize,
+    tick: u32,
     synchronized: bool,
     stalling: bool,
     network_data: NetworkData,
@@ -40,15 +39,15 @@ struct TickCommands {
 }
 
 struct NetworkData {
-    client_id: u8,
-    client_ids: Vec<u8>,
+    client_id: u32,
+    client_ids: Vec<u32>,
     seed: u32,
 }
 
 struct PlayerData {
     player_id: usize,
     player_ids: Vec<usize>,
-    map: HashMap<u8, usize>,
+    map: HashMap<u32, usize>,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -114,7 +113,7 @@ impl Play {
             return;
         }
 
-        let tick_commands = &self.commands[self.tick];
+        let tick_commands = &self.commands[self.tick as usize];
 
         self.stalling = !tick_commands.ready;
 
@@ -139,7 +138,7 @@ impl Play {
 
         // send the current command queue
         bus.send(NetRequestMessage::Commands(
-            self.tick + TICK_SKIP_INITIAL,
+            self.tick + TICK_SCHEDULED,
             self.command_queue.drain().collect(),
         ));
 
@@ -216,14 +215,14 @@ impl Play {
     pub fn message(&mut self, msg: &Message) {
         match msg {
             Message::Net(msg) => match msg {
-                NetMessage::Synchronize(cid, cids, seed) => {
+                NetMessage::Synchronize(seed, cid, cids) => {
                     // set the networking data
-                    self.network_data.client_id = *cid;
-                    self.network_data.client_ids = cids.clone();
                     self.network_data.seed = *seed;
+                    self.network_data.client_id = *cid;
+                    self.network_data.client_ids = cids.to_vec();
 
                     // create the players in the cosmos and set the player data
-                    for client_id in cids {
+                    for client_id in cids.iter() {
                         let player_id = self.add_player();
 
                         self.player_data.player_ids.push(player_id);
@@ -236,7 +235,7 @@ impl Play {
 
                     // commands are scheduled x ticks in the future,
                     // make sure we can progress for the first ticks
-                    for _ in 0..TICK_SKIP_INITIAL {
+                    for _ in 0..TICK_SCHEDULED {
                         self.commands.push(TickCommands {
                             ready: true,
                             commands: Vec::new(),
@@ -247,7 +246,7 @@ impl Play {
                     self.synchronized = true;
                 }
                 NetMessage::Commands(cid, tick, cmds) => {
-                    let tick_commands = &mut self.commands[*tick];
+                    let tick_commands = &mut self.commands[*tick as usize];
 
                     // add the client's commands
                     tick_commands.commands.push(EntityCommands {

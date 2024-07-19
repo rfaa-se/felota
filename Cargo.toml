@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 raylib = { version = "5.0.1", features = ["wayland"] }
+redpine = "0.2.1"

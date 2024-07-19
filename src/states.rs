@@ -1,3 +1,5 @@
+pub mod lobby;
+pub mod menu;
 pub mod play;
 
 use raylib::prelude::*;
@@ -7,11 +9,15 @@ use crate::{
     messages::{Message, StateMessage, StateRequestMessage},
 };
 
+use self::lobby::Lobby;
+use self::menu::Menu;
 use self::play::Play;
 
 #[derive(Copy, Clone, Debug)]
 pub enum State {
     None,
+    Menu,
+    Lobby,
     Play,
 }
 
@@ -20,6 +26,8 @@ enum Action {
 }
 
 struct States {
+    menu: Menu,
+    lobby: Lobby,
     play: Play,
 }
 
@@ -33,7 +41,11 @@ impl System {
     pub fn new() -> Self {
         Self {
             current: State::None,
-            states: States { play: Play::new() },
+            states: States {
+                play: Play::new(),
+                menu: Menu::new(),
+                lobby: Lobby::new(),
+            },
             actions: Vec::new(),
         }
     }
@@ -44,6 +56,8 @@ impl System {
         match self.current {
             State::None => (),
             State::Play => self.states.play.update(h, bus),
+            State::Menu => self.states.menu.update(h, bus),
+            State::Lobby => self.states.lobby.update(h, bus),
         }
     }
 
@@ -51,6 +65,8 @@ impl System {
         match self.current {
             State::None => (),
             State::Play => self.states.play.input(h),
+            State::Menu => self.states.menu.input(h),
+            State::Lobby => self.states.lobby.input(h),
         }
     }
 
@@ -58,6 +74,8 @@ impl System {
         match self.current {
             State::None => (),
             State::Play => self.states.play.draw(r, delta),
+            State::Menu => self.states.menu.draw(r, delta),
+            State::Lobby => self.states.lobby.draw(r, delta),
         }
     }
 
@@ -73,6 +91,8 @@ impl System {
         match self.current {
             State::None => (),
             State::Play => self.states.play.message(msg),
+            State::Menu => self.states.menu.message(msg),
+            State::Lobby => self.states.lobby.message(msg),
         }
     }
 
@@ -86,6 +106,8 @@ impl System {
                     match self.current {
                         State::None => (),
                         State::Play => self.states.play.exit(),
+                        State::Menu => self.states.menu.exit(),
+                        State::Lobby => self.states.lobby.exit(),
                     }
 
                     self.current = state;
@@ -94,6 +116,8 @@ impl System {
                     match self.current {
                         State::None => (),
                         State::Play => self.states.play.init(bus),
+                        State::Menu => self.states.menu.init(bus),
+                        State::Lobby => self.states.lobby.init(bus),
                     }
                 }
             }

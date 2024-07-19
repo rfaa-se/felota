@@ -33,7 +33,7 @@ impl System {
         );
 
         self.command_logs.iter().fold(
-            RENDER_HEIGHT as i32 - self.command_logs.len() as i32 * 10 - 272,
+            RENDER_HEIGHT as i32 - self.command_logs.len() as i32 * 10 - 282,
             |y, log| {
                 r.draw_text(log, 3, y, 10, DEBUG_COLOR);
                 y + 10
@@ -49,6 +49,7 @@ impl System {
                 if self.command_logs.len() > 20 {
                     self.command_logs.pop_front();
                 }
+
                 self.command_logs
                     .push_back(format!("{:?}", msg).replace("(", "->").replace(")", ""));
             }

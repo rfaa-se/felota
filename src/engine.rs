@@ -128,7 +128,7 @@ impl Engine {
     }
 
     fn init(&mut self) {
-        self.bus.send(StateRequestMessage::Set(State::Play));
+        self.bus.send(StateRequestMessage::Set(State::Menu));
     }
 }
 

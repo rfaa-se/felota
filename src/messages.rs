@@ -9,7 +9,7 @@ pub enum Message {
 #[derive(Debug)]
 pub enum StateMessage {
     Request(StateRequestMessage),
-    // not currently used, only signals that a state has been set
+    // not currently used anywhere, only signals that a state has been set
     #[allow(dead_code)]
     Set(State),
 }
@@ -22,14 +22,22 @@ pub enum StateRequestMessage {
 #[derive(Debug)]
 pub enum NetMessage {
     Request(NetRequestMessage),
-    Synchronize(u8, Vec<u8>, u32),
-    Commands(u8, usize, Vec<Command>),
+    Synchronize(u32, u32, Box<[u32]>),
+    Hosted,
+    Connected,
+    Disconnected,
+    Start,
+    Commands(u32, u32, Box<[Command]>),
 }
 
 #[derive(Debug)]
 pub enum NetRequestMessage {
     Synchronize,
-    Commands(usize, Vec<Command>),
+    Host,
+    Start,
+    Connect(String),
+    Disconnect,
+    Commands(u32, Box<[Command]>),
 }
 
 impl Into<Message> for StateMessage {

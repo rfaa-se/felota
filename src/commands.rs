@@ -8,7 +8,7 @@ use raylib::prelude::*;
 
 pub struct EntityCommands {
     pub id: usize,
-    pub commands: Vec<Command>,
+    pub commands: Box<[Command]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,6 +18,11 @@ pub enum Command {
     RotateLeft,
     RotateRight,
 }
+
+const ACCELERATE: u8 = 1;
+const DECELERATE: u8 = 2;
+const ROTATE_LEFT: u8 = 3;
+const ROTATE_RIGHT: u8 = 4;
 
 impl Command {
     pub fn execute(&self, entities: &mut Entities, id: usize, forge: &Forge, h: &mut RaylibHandle) {
@@ -31,6 +36,40 @@ impl Command {
             Command::RotateLeft => handle_rotate_left(entities, eidx, forge, h),
             Command::RotateRight => handle_rotate_right(entities, eidx, forge, h),
         }
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let Some((ctype, _data)) = bytes.split_first() else {
+            panic!("wtf cmd");
+        };
+
+        match *ctype {
+            ACCELERATE => Command::Accelerate,
+            DECELERATE => Command::Decelerate,
+            ROTATE_LEFT => Command::RotateLeft,
+            ROTATE_RIGHT => Command::RotateRight,
+            _ => panic!("wtf ctype {}", ctype),
+        }
+    }
+
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut bytes = Vec::new();
+
+        // for now all commands are 1 in length
+        let len = match self {
+            _ => 1,
+        };
+
+        bytes.push(len);
+
+        match self {
+            Command::Accelerate => bytes.push(ACCELERATE),
+            Command::Decelerate => bytes.push(DECELERATE),
+            Command::RotateLeft => bytes.push(ROTATE_LEFT),
+            Command::RotateRight => bytes.push(ROTATE_RIGHT),
+        }
+
+        bytes.into_boxed_slice()
     }
 }
 

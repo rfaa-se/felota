@@ -11,6 +11,7 @@ mod logic;
 mod logs;
 mod messages;
 mod net;
+mod packets;
 mod render;
 mod states;
 mod systems;
