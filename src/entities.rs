@@ -40,6 +40,7 @@ pub struct Projectile {
     pub damage: f32,
     pub body: Body<Rectangle>,
     pub motion: Motion,
+    pub owner_id: usize,
 }
 
 pub struct Particle {

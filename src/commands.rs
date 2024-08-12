@@ -17,12 +17,14 @@ pub enum Command {
     Decelerate,
     RotateLeft,
     RotateRight,
+    Projectile,
 }
 
 const ACCELERATE: u8 = 1;
 const DECELERATE: u8 = 2;
 const ROTATE_LEFT: u8 = 3;
 const ROTATE_RIGHT: u8 = 4;
+const PROJECTILE: u8 = 5;
 
 impl Command {
     pub fn execute(&self, entities: &mut Entities, id: usize, forge: &Forge, h: &mut RaylibHandle) {
@@ -35,6 +37,7 @@ impl Command {
             Command::Decelerate => handle_decelerate(entities, eidx, forge, h),
             Command::RotateLeft => handle_rotate_left(entities, eidx, forge, h),
             Command::RotateRight => handle_rotate_right(entities, eidx, forge, h),
+            Command::Projectile => handle_projectile(entities, eidx, id, forge),
         }
     }
 
@@ -48,6 +51,7 @@ impl Command {
             DECELERATE => Command::Decelerate,
             ROTATE_LEFT => Command::RotateLeft,
             ROTATE_RIGHT => Command::RotateRight,
+            PROJECTILE => Command::Projectile,
             _ => panic!("wtf ctype {}", ctype),
         }
     }
@@ -67,6 +71,7 @@ impl Command {
             Command::Decelerate => bytes.push(DECELERATE),
             Command::RotateLeft => bytes.push(ROTATE_LEFT),
             Command::RotateRight => bytes.push(ROTATE_RIGHT),
+            Command::Projectile => bytes.push(PROJECTILE),
         }
 
         bytes.into_boxed_slice()
@@ -221,4 +226,22 @@ fn handle_rotate_right(
             entities.add(Entity::Exhaust(exhaust));
         }
     }
+}
+
+fn handle_projectile(entities: &mut Entities, eidx: EntityIndex, id: usize, forge: &Forge) {
+    let (body, velocity) = match eidx {
+        EntityIndex::Triship(idx) => {
+            let e = &entities.triships[idx].entity;
+            (&e.body, e.motion.velocity)
+        }
+        _ => return,
+    };
+
+    let rotation = body.generation.new.rotation;
+    let rotated = body.generation.new.shape.rotated(rotation);
+    let position = rotated.v2;
+
+    let projectile = forge.projectile(position, rotation, velocity, id);
+
+    entities.add(Entity::Projectile(projectile));
 }

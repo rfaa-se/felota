@@ -74,7 +74,7 @@ impl Play {
             camera: Camera2D {
                 offset: Vector2 {
                     x: (RENDER_WIDTH / 2) as f32,
-                    y: (RENDER_HEIGHT / 2) as f32,
+                    y: ((RENDER_HEIGHT / 2) - HUD_HEIGHT / 2) as f32,
                 },
                 target: Vector2::zero(),
                 rotation: 0.0,
@@ -167,26 +167,34 @@ impl Play {
         if h.is_key_down(KeyboardKey::KEY_DOWN) {
             self.actions.insert(Action::Command(Command::Decelerate));
         }
+
+        if h.is_key_down(KeyboardKey::KEY_SPACE) {
+            self.actions.insert(Action::Command(Command::Projectile));
+        }
     }
 
     pub fn draw(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, delta: f32) {
+        if !self.synchronized {
+            return;
+        }
+
         // make the camera follow the player
         self.camera.target = self.camera_target.old.lerp(self.camera_target.new, delta);
 
         {
-            let mut rr = r.begin_mode2D(self.camera);
+            let mut r = r.begin_mode2D(self.camera);
 
             // the viewport is used to cull entities not currently shown on screen
             // TODO: should not be smaller than the screen,
             // only smaller now to make sure code works when culling is implemented
             let viewport = Rectangle {
-                x: self.camera.target.x - RENDER_WIDTH as f32 / 2.0 + 20.0,
-                y: self.camera.target.y - RENDER_HEIGHT as f32 / 2.0 + 20.0,
-                width: RENDER_WIDTH as f32 - 40.0,
-                height: RENDER_HEIGHT as f32 - HUD_HEIGHT as f32 - 40.0,
+                x: self.camera.target.x - self.camera.offset.x + 100.0,
+                y: self.camera.target.y - self.camera.offset.y + 100.0,
+                width: self.camera.offset.x * 2.0 - 200.0,
+                height: self.camera.offset.y * 2.0 - 200.0,
             };
 
-            self.renderer.draw(&mut rr, &self.entities, viewport, delta);
+            self.renderer.draw(&mut r, &self.entities, viewport, delta);
         }
 
         if self.stalling {

@@ -109,6 +109,7 @@ impl Menu {
                 }
                 Action::Hosted => {
                     self.hosted = true;
+                    self.actions.insert(Action::Join("127.0.0.1".to_owned()));
                 }
                 Action::Connected => {
                     bus.send(StateRequestMessage::Set(State::Lobby));

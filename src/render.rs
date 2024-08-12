@@ -1,7 +1,7 @@
 use raylib::prelude::*;
 
 use crate::{
-    components::{Centroidable, Lerpable, Rotatable},
+    components::{Cullable, Lerpable, Rotatable},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH},
     entities::Entities,
 };
@@ -21,6 +21,10 @@ impl Renderer {
         delta: f32,
     ) {
         for triship in &entities.triships {
+            if triship.entity.body.should_cull(viewport) {
+                continue;
+            }
+
             let gen = &triship.entity.body.generation;
             let rot = gen.old.rotation.lerp(gen.new.rotation, delta);
             let ent = gen.lerp(delta).rotated(rot);
@@ -59,10 +63,39 @@ impl Renderer {
         }
 
         for exhaust in &entities.exhausts {
+            if exhaust.entity.body.should_cull(viewport) {
+                continue;
+            }
+
             let gen = &exhaust.entity.body.generation;
             let ent = gen.lerp(delta);
 
             r.draw_pixel_v(ent, exhaust.entity.body.color);
+        }
+
+        for projectile in &entities.projectiles {
+            if projectile.entity.body.should_cull(viewport) {
+                continue;
+            }
+
+            let gen = projectile.entity.body.generation;
+            let rot = gen.old.rotation.lerp(gen.new.rotation, delta);
+            let rad = rot.y.atan2(rot.x);
+            let deg = rad.to_degrees();
+            let ent = gen.lerp(delta);
+
+            // for some reason we need to add half the width and height to rotated rectangle's x and y
+            r.draw_rectangle_pro(
+                Rectangle {
+                    x: ent.x + ent.width / 2.0,
+                    y: ent.y + ent.height / 2.0,
+                    width: ent.width,
+                    height: ent.height,
+                },
+                Vector2::new(ent.width / 2.0, ent.height / 2.0),
+                deg,
+                projectile.entity.body.color,
+            );
         }
 
         r.draw_rectangle_lines_ex(viewport, 1.0, Color::RED);

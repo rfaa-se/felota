@@ -24,7 +24,7 @@ enum Action {
     Synchronize,
     SendCommands(u32, Box<[Command]>),
     Create,
-    Join(String),
+    Connect(String),
     Start,
     Disconnect,
     Shutdown,
@@ -59,7 +59,9 @@ impl System {
                     self.actions.push(Action::SendCommands(*tick, cmds.clone()))
                 }
                 NetRequestMessage::Host => self.actions.push(Action::Create),
-                NetRequestMessage::Connect(host) => self.actions.push(Action::Join(host.clone())),
+                NetRequestMessage::Connect(host) => {
+                    self.actions.push(Action::Connect(host.clone()))
+                }
                 NetRequestMessage::Start => {
                     // can only start the game if we're hosting
                     if self.server.is_some() {
@@ -210,7 +212,7 @@ impl System {
                         bus.send(NetMessage::Hosted);
                     }
                 }
-                Action::Join(host) => {
+                Action::Connect(host) => {
                     if let Ok(client) = Client::connect((host, PORT)) {
                         self.client = Some(client);
                     }

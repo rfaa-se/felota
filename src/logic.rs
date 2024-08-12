@@ -2,6 +2,7 @@ use crate::{
     bus::Bus,
     commands::EntityCommands,
     components::{Acceleratable, Motion, Renewable},
+    constants::{COSMOS_HEIGHT, COSMOS_WIDTH},
     entities::Entities,
     forge::Forge,
 };
@@ -89,21 +90,24 @@ fn update_commands(
 fn update_motion(entities: &mut Entities) {
     (&mut entities.triships)
         .into_iter()
-        .map(|x| &mut x.entity.motion)
+        .map(|x| (&mut x.entity.motion, true))
         .chain(
             (&mut entities.projectiles)
                 .into_iter()
-                .map(|x| &mut x.entity.motion),
+                .map(|x| (&mut x.entity.motion, false)),
         )
         .chain(
             (&mut entities.exhausts)
                 .into_iter()
-                .map(|x| &mut x.entity.motion),
+                .map(|x| (&mut x.entity.motion, true)),
         )
-        .for_each(|x| {
-            apply_cosmic_drag(x);
-            check_speed_max(x);
-            check_rotation_speed_max(x);
+        .for_each(|(motion, apply_drag)| {
+            if apply_drag {
+                apply_cosmic_drag(motion);
+            }
+
+            check_speed_max(motion);
+            check_rotation_speed_max(motion);
         });
 
     fn apply_cosmic_drag(motion: &mut Motion) {
@@ -180,4 +184,20 @@ fn update_body(entities: &mut Entities) {
     }
 }
 
-fn update_out_of_bounds(_entities: &mut Entities, _dead: &mut Vec<usize>) {}
+fn update_out_of_bounds(entities: &mut Entities, dead: &mut Vec<usize>) {
+    (&mut entities.projectiles)
+        .into_iter()
+        .map(|x| (x.id, &mut x.entity.body))
+        .for_each(|(id, body)| {
+            let s = body.generation.new.shape;
+            let max = s.width.max(s.height);
+
+            if s.x - max < 0.0
+                || s.x > COSMOS_WIDTH as f32
+                || s.y - max < 0.0
+                || s.y > COSMOS_HEIGHT as f32
+            {
+                dead.push(id);
+            }
+        });
+}

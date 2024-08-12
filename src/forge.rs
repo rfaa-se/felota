@@ -42,6 +42,57 @@ impl Forge {
         }
     }
 
+    pub fn projectile(
+        &self,
+        position: Vector2,
+        direction: Vector2,
+        initial_velocity: Vector2,
+        owner_id: usize,
+    ) -> Projectile {
+        // |\
+        // | \
+        // |  \_ <- placement will be here, in front of ship
+        // |  /
+        // | /
+        // |/
+
+        let width = 2.0;
+        let height = 1.0;
+        let distance = direction * (width / 2.0);
+        let position = Vector2::new(position.x + distance.x, position.y + distance.y);
+        let shape = RotatedShape {
+            shape: Rectangle {
+                x: position.x - width / 2.0,
+                y: position.y - height / 2.0,
+                width,
+                height,
+            },
+            rotation: direction,
+        };
+
+        let speed = 20.0;
+
+        Projectile {
+            damage: 2.0,
+            body: Body {
+                generation: Generation {
+                    old: shape,
+                    new: shape,
+                },
+                color: Color::LIGHTGOLDENRODYELLOW,
+            },
+            motion: Motion {
+                velocity: initial_velocity + direction * speed,
+                acceleration: 1.1,
+                speed_max: 30.0,
+                rotation_speed: 0.0,
+                rotation_acceleration: 0.0,
+                rotation_speed_max: 0.0,
+            },
+            owner_id,
+        }
+    }
+
     pub fn exhaust(
         &self,
         position: Vector2,
@@ -79,7 +130,7 @@ impl Forge {
         &self,
         position: Vector2,
         rotation: Vector2,
-        originator_velocity: Vector2,
+        initial_velocity: Vector2,
         h: &mut RaylibHandle,
     ) -> Vec<Particle> {
         // 32 particles
@@ -117,7 +168,7 @@ impl Forge {
                 // some random values to make it look awesome
                 let lifetime = (h.get_random_value::<i32>(0..4) + j) as u8;
                 let speed = h.get_random_value::<i32>(1..6) as f32;
-                let velocity = originator_velocity + rotation * speed;
+                let velocity = initial_velocity + rotation * speed;
                 let acceleration = h.get_random_value::<i32>(1..4) as f32 / speed;
 
                 // clamp shit!? once ship is heading in a straight line, the afterburner gets smaller
@@ -133,7 +184,7 @@ impl Forge {
         &self,
         position: Vector2,
         rotation: Vector2,
-        originator_velocity: Vector2,
+        initial_velocity: Vector2,
         h: &mut RaylibHandle,
     ) -> Vec<Particle> {
         let mut exhaust = Vec::new();
@@ -158,7 +209,7 @@ impl Forge {
                 // some random values to make it look awesome
                 let lifetime = (h.get_random_value::<i32>(0..4) + j) as u8;
                 let speed = h.get_random_value::<i32>(1..6) as f32;
-                let velocity = originator_velocity + rotation * speed;
+                let velocity = initial_velocity + rotation * speed;
                 let acceleration = h.get_random_value::<i32>(1..4) as f32 / speed;
 
                 exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration));
@@ -172,7 +223,7 @@ impl Forge {
         &self,
         position_port: Vector2,
         position_starboard: Vector2,
-        originator_velocity: Vector2,
+        initial_velocity: Vector2,
         rotation: Vector2,
         h: &mut RaylibHandle,
     ) -> Vec<Particle> {
@@ -184,14 +235,14 @@ impl Forge {
         exhaust.append(&mut self.exhaust_thruster_side(
             position_port,
             rotation,
-            originator_velocity,
+            initial_velocity,
             h,
         ));
 
         exhaust.append(&mut self.exhaust_thruster_side(
             position_starboard,
             rotation,
-            originator_velocity,
+            initial_velocity,
             h,
         ));
 
