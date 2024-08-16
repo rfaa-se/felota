@@ -10,6 +10,7 @@ mod forge;
 mod logic;
 mod logs;
 mod messages;
+mod misc;
 mod net;
 mod packets;
 mod render;

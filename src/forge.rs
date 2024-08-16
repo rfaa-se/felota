@@ -30,6 +30,11 @@ impl Forge {
                     new: shape,
                 },
                 color: Color::RED,
+                polygon: Polygon {
+                    dirty: true,
+                    vertexes: Vec::new(),
+                    bounds: Rectangle::new(0.0, 0.0, 0.0, 0.0),
+                },
             },
             motion: Motion {
                 velocity: Vector2::zero(),
@@ -80,6 +85,11 @@ impl Forge {
                     new: shape,
                 },
                 color: Color::LIGHTGOLDENRODYELLOW,
+                polygon: Polygon {
+                    dirty: true,
+                    vertexes: Vec::new(),
+                    bounds: Rectangle::new(0.0, 0.0, 0.0, 0.0),
+                },
             },
             motion: Motion {
                 velocity: initial_velocity + direction * speed,
@@ -114,6 +124,11 @@ impl Forge {
                     new: shape,
                 },
                 color: Color::LIGHTSKYBLUE,
+                polygon: Polygon {
+                    dirty: true,
+                    vertexes: Vec::new(),
+                    bounds: Rectangle::new(0.0, 0.0, 0.0, 0.0),
+                },
             },
             motion: Motion {
                 velocity,

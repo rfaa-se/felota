@@ -1,5 +1,4 @@
 use crate::{
-    components::Rotatable,
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
 };
@@ -98,16 +97,10 @@ fn handle_accelerate(
     if let EntityIndex::Triship(idx) = eidx {
         let orignator_velocity = motion.velocity;
         let triship = &entities.triships[idx].entity;
-
-        let body = triship
-            .body
-            .generation
-            .new
-            .shape
-            .rotated(triship.body.generation.new.rotation);
+        let body = &triship.body.polygon.vertexes;
 
         // calculate the placement position of the afterburner
-        let position = Vector2::new((body.v1.x + body.v3.x) / 2.0, (body.v1.y + body.v3.y) / 2.0);
+        let position = Vector2::new((body[0].x + body[2].x) / 2.0, (body[0].y + body[2].y) / 2.0);
 
         // rotate 180 degrees, we want the exhaust to be pointed away from the rotation of the entity
         let exhaust_rotation = Vector2 {
@@ -162,13 +155,12 @@ fn handle_rotate_left(
     if let EntityIndex::Triship(idx) = eidx {
         let triship = &entities.triships[idx].entity;
         let originator_velocity = triship.motion.velocity;
-
-        let body = triship.body.generation.new.shape.rotated(old_rotation);
+        let vertexes = &triship.body.polygon.vertexes;
 
         // calculate the placement position of the thruster
         let position = Vector2::new(
-            body.v3.x * 0.2 + body.v2.x * 0.8,
-            body.v3.y * 0.2 + body.v2.y * 0.8,
+            vertexes[2].x * 0.2 + vertexes[1].x * 0.8,
+            vertexes[2].y * 0.2 + vertexes[1].y * 0.8,
         );
 
         // rotate 270 degrees, we want the exhaust to be pointed to the right of the entity
@@ -205,13 +197,12 @@ fn handle_rotate_right(
     if let EntityIndex::Triship(idx) = eidx {
         let triship = &entities.triships[idx].entity;
         let originator_velocity = triship.motion.velocity;
-
-        let body = triship.body.generation.new.shape.rotated(old_rotation);
+        let vertexes = &triship.body.polygon.vertexes;
 
         // calculate the placement position of the thruster
         let position = Vector2::new(
-            body.v1.x * 0.2 + body.v2.x * 0.8,
-            body.v1.y * 0.2 + body.v2.y * 0.8,
+            vertexes[0].x * 0.2 + vertexes[1].x * 0.8,
+            vertexes[0].y * 0.2 + vertexes[1].y * 0.8,
         );
 
         // rotate 90 degrees, we want the exhaust to be pointed to the right of the entity
@@ -238,9 +229,7 @@ fn handle_projectile(entities: &mut Entities, eidx: EntityIndex, id: usize, forg
     };
 
     let rotation = body.generation.new.rotation;
-    let rotated = body.generation.new.shape.rotated(rotation);
-    let position = rotated.v2;
-
+    let position = body.polygon.vertexes[1];
     let projectile = forge.projectile(position, rotation, velocity, id);
 
     entities.add(Entity::Projectile(projectile));

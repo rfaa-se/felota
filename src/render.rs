@@ -1,7 +1,7 @@
 use raylib::prelude::*;
 
 use crate::{
-    components::{Cullable, Lerpable, Rotatable},
+    components::{Centroidable, Cullable, Lerpable, Triangle},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH},
     entities::Entities,
 };
@@ -21,13 +21,21 @@ impl Renderer {
         delta: f32,
     ) {
         for triship in &entities.triships {
-            if triship.entity.body.should_cull(viewport) {
+            if triship.entity.body.cull(viewport) {
                 continue;
             }
 
             let gen = &triship.entity.body.generation;
             let rot = gen.old.rotation.lerp(gen.new.rotation, delta);
-            let ent = gen.lerp(delta).rotated(rot);
+            let rad = rot.y.atan2(rot.x);
+            let (sin, cos) = rad.sin_cos();
+            let ent = gen.lerp(delta);
+            let ori = ent.centroid();
+            let ent = Triangle {
+                v1: rotate(ent.v1, ori, sin, cos),
+                v2: rotate(ent.v2, ori, sin, cos),
+                v3: rotate(ent.v3, ori, sin, cos),
+            };
 
             r.draw_triangle_lines(ent.v1, ent.v2, ent.v3, triship.entity.body.color);
 
@@ -60,10 +68,22 @@ impl Renderer {
             //     1.0,
             //     Color::WHITE,
             // );
+
+            r.draw_rectangle_lines_ex(
+                // Rectangle {
+                //     x: triship.entity.body.polygon.bounds.,
+                //     y: todo!(),
+                //     width: todo!(),
+                //     height: todo!(),
+                // },
+                triship.entity.body.polygon.bounds,
+                1.0,
+                triship.entity.body.color,
+            );
         }
 
         for exhaust in &entities.exhausts {
-            if exhaust.entity.body.should_cull(viewport) {
+            if exhaust.entity.body.cull(viewport) {
                 continue;
             }
 
@@ -74,7 +94,7 @@ impl Renderer {
         }
 
         for projectile in &entities.projectiles {
-            if projectile.entity.body.should_cull(viewport) {
+            if projectile.entity.body.cull(viewport) {
                 continue;
             }
 
@@ -101,5 +121,12 @@ impl Renderer {
         r.draw_rectangle_lines_ex(viewport, 1.0, Color::RED);
 
         r.draw_rectangle_lines(0, 0, COSMOS_WIDTH, COSMOS_HEIGHT, Color::RED);
+    }
+}
+
+fn rotate(point: Vector2, origin: Vector2, sin: f32, cos: f32) -> Vector2 {
+    Vector2 {
+        x: (cos * (point.x - origin.x)) - (sin * (point.y - origin.y)) + origin.x,
+        y: (sin * (point.x - origin.x)) + (cos * (point.y - origin.y)) + origin.y,
     }
 }

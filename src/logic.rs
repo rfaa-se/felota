@@ -1,10 +1,11 @@
 use crate::{
     bus::Bus,
     commands::EntityCommands,
-    components::{Acceleratable, Motion, Renewable},
+    components::{Motion, Regeneratable, Shape},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH},
-    entities::Entities,
+    entities::{Entities, EntityIndex},
     forge::Forge,
+    misc::QuadTree,
 };
 
 use raylib::prelude::*;
@@ -34,8 +35,41 @@ impl Logic {
         update_commands(entities, entity_cmds, forge, h);
         update_motion(entities);
         update_body(entities);
+        update_collision_detection(entities);
         update_particles(entities, &mut self.dead);
         update_out_of_bounds(entities, &mut self.dead);
+    }
+}
+
+fn update_collision_detection(entities: &mut Entities) {
+    let qt = QuadTree::new(100.0, 100.0);
+
+    for node in qt.nodes() {
+        let eidxs = node.eidxs();
+
+        for i in 0..eidxs.len() {
+            let one = eidxs[i];
+            let v_one = match one {
+                EntityIndex::Triship(idx) => &entities.triships[idx].entity.body.polygon.vertexes,
+                EntityIndex::Projectile(idx) => {
+                    &entities.projectiles[idx].entity.body.polygon.vertexes
+                }
+                _ => continue,
+            };
+
+            for j in i + 1..eidxs.len() {
+                let two = eidxs[j];
+                let v_two = match two {
+                    EntityIndex::Triship(idx) => {
+                        &entities.triships[idx].entity.body.polygon.vertexes
+                    }
+                    EntityIndex::Projectile(idx) => {
+                        &entities.projectiles[idx].entity.body.polygon.vertexes
+                    }
+                    _ => continue,
+                };
+            }
+        }
     }
 }
 
@@ -58,19 +92,19 @@ fn update_dead(entities: &mut Entities, dead: &mut Vec<usize>) {
 fn update_body_generation(entities: &mut Entities) {
     (&mut entities.triships)
         .into_iter()
-        .map(|x| &mut x.entity.body.generation as &mut dyn Renewable)
+        .map(|x| &mut x.entity.body.generation as &mut dyn Regeneratable)
         .chain(
             (&mut entities.projectiles)
                 .into_iter()
-                .map(|x| &mut x.entity.body.generation as &mut dyn Renewable),
+                .map(|x| &mut x.entity.body.generation as &mut dyn Regeneratable),
         )
         .chain(
             (&mut entities.exhausts)
                 .into_iter()
-                .map(|x| &mut x.entity.body.generation as &mut dyn Renewable),
+                .map(|x| &mut x.entity.body.generation as &mut dyn Regeneratable),
         )
         .for_each(|x| {
-            x.renew();
+            x.regenerate();
         })
 }
 
@@ -152,36 +186,22 @@ fn update_motion(entities: &mut Entities) {
 fn update_body(entities: &mut Entities) {
     (&mut entities.triships)
         .into_iter()
-        .map(|x| {
-            (
-                &mut x.entity.body.generation.new.shape as &mut dyn Acceleratable,
-                &x.entity.motion,
-                &mut x.entity.body.generation.new.rotation,
-            )
-        })
-        .chain((&mut entities.projectiles).into_iter().map(|x| {
-            (
-                &mut x.entity.body.generation.new.shape as &mut dyn Acceleratable,
-                &x.entity.motion,
-                &mut x.entity.body.generation.new.rotation,
-            )
-        }))
-        .chain((&mut entities.exhausts).into_iter().map(|x| {
-            (
-                &mut x.entity.body.generation.new.shape as &mut dyn Acceleratable,
-                &x.entity.motion,
-                &mut x.entity.body.generation.new.rotation,
-            )
-        }))
-        .for_each(|(shape, motion, rotation)| {
+        .map(|x| (&mut x.entity.body as &mut dyn Shape, &x.entity.motion))
+        .chain(
+            (&mut entities.projectiles)
+                .into_iter()
+                .map(|x| (&mut x.entity.body as &mut dyn Shape, &x.entity.motion)),
+        )
+        .chain(
+            (&mut entities.exhausts)
+                .into_iter()
+                .map(|x| (&mut x.entity.body as &mut dyn Shape, &x.entity.motion)),
+        )
+        .for_each(|(shape, motion)| {
             shape.accelerate(motion.velocity);
-            update_rotation(rotation, motion);
+            shape.rotate(motion.rotation_speed);
+            shape.renew();
         });
-
-    fn update_rotation(rotation: &mut Vector2, motion: &Motion) {
-        let radians = rotation.y.atan2(rotation.x) + motion.rotation_speed;
-        (rotation.y, rotation.x) = radians.sin_cos();
-    }
 }
 
 fn update_out_of_bounds(entities: &mut Entities, dead: &mut Vec<usize>) {
