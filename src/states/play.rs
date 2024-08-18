@@ -195,6 +195,7 @@ impl Play {
             };
 
             self.renderer.draw(&mut r, &self.entities, viewport, delta);
+            self.logic.draw(&mut r);
         }
 
         if self.stalling {
@@ -254,6 +255,7 @@ impl Play {
                     self.synchronized = true;
                 }
                 NetMessage::Commands(cid, tick, cmds) => {
+                    // TODO: this might panic, investigate
                     let tick_commands = &mut self.commands[*tick as usize];
 
                     // add the client's commands

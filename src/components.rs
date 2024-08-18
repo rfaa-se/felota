@@ -43,7 +43,7 @@ pub struct Motion {
 pub struct Polygon {
     pub dirty: bool,
     pub vertexes: Vec<Vector2>,
-    pub bounds: Rectangle,
+    pub bounds: Generation<Rectangle>,
 }
 
 // TODO: move me?

@@ -42,47 +42,9 @@ impl Shape for Body<Triangle> {}
 impl Shape for Body<Rectangle> {}
 impl Shape for Body<Vector2> {}
 
-// TODO: use bounding box for this, generic impl
-impl Cullable for Body<Rectangle> {
+impl Cullable for Rectangle {
     fn cull(&self, viewport: Rectangle) -> bool {
-        // this does not take rotation into consideration,
-        // instead we create a square big enough to contain every rotation
-        let s = self.generation.old.shape;
-        let max = s.width.max(s.height);
-        let max2 = max * 2.0;
-
-        !viewport.check_collision_recs(&Rectangle {
-            x: s.x - max,
-            y: s.y - max,
-            width: max2,
-            height: max2,
-        })
-    }
-}
-
-impl Cullable for Body<Triangle> {
-    fn cull(&self, viewport: Rectangle) -> bool {
-        // this does not take rotation into consideration,
-        // instead we create a square big enough to contain every rotation
-        let s = self.generation.old.shape;
-        let c = s.centroid();
-        let x = (s.v1.x - s.v2.x).abs().max((s.v2.x - s.v3.x).abs());
-        let y = (s.v1.y - s.v2.y).abs().max((s.v2.y - s.v3.y).abs());
-        let max = x.max(y);
-        let max2 = max * 2.0;
-
-        !viewport.check_collision_recs(&Rectangle {
-            x: c.x - max,
-            y: c.y - max,
-            width: max2,
-            height: max2,
-        })
-    }
-}
-
-impl Cullable for Body<Vector2> {
-    fn cull(&self, viewport: Rectangle) -> bool {
-        !viewport.check_collision_point_rec(self.generation.old.shape)
+        !viewport.check_collision_recs(&self)
     }
 }
 
@@ -121,6 +83,22 @@ impl Lerpable<Rectangle> for Generation<RotatedShape<Rectangle>> {
         let xy = Vector2::new(old.x, old.y).lerp(Vector2::new(new.x, new.y), amount);
         let wh =
             Vector2::new(old.width, old.height).lerp(Vector2::new(new.width, new.height), amount);
+
+        Rectangle {
+            x: xy.x,
+            y: xy.y,
+            width: wh.x,
+            height: wh.y,
+        }
+    }
+}
+
+impl Lerpable<Rectangle> for Generation<Rectangle> {
+    fn lerp(&self, amount: f32) -> Rectangle {
+        let xy =
+            Vector2::new(self.old.x, self.old.y).lerp(Vector2::new(self.new.x, self.new.y), amount);
+        let wh = Vector2::new(self.old.width, self.old.height)
+            .lerp(Vector2::new(self.new.width, self.new.height), amount);
 
         Rectangle {
             x: xy.x,
@@ -279,7 +257,7 @@ where
             .shape
             .vertexes(self.generation.new.rotation);
 
-        self.polygon.bounds = self.polygon.vertexes.bounds();
+        self.polygon.bounds.new = self.polygon.vertexes.bounds();
 
         self.polygon.dirty = false;
     }

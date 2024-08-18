@@ -21,7 +21,9 @@ impl Renderer {
         delta: f32,
     ) {
         for triship in &entities.triships {
-            if triship.entity.body.cull(viewport) {
+            let bounds = triship.entity.body.polygon.bounds.lerp(delta);
+
+            if bounds.cull(viewport) {
                 continue;
             }
 
@@ -39,51 +41,43 @@ impl Renderer {
 
             r.draw_triangle_lines(ent.v1, ent.v2, ent.v3, triship.entity.body.color);
 
-            // let deg = gen.new.rotation.y.atan2(gen.new.rotation.x).to_degrees();
-            // r.draw_text_ex(
-            //     r.get_font_default(),
-            //     &format!("{}", deg),
-            //     ent.v1,
-            //     10.0,
-            //     1.0,
-            //     Color::WHITE,
-            // );
-
-            // let vel = triship.entity.motion.velocity;
-            // r.draw_text_ex(
-            //     r.get_font_default(),
-            //     &format!("{}, {}", vel.x, vel.y),
-            //     ent.v2,
-            //     10.0,
-            //     1.0,
-            //     Color::WHITE,
-            // );
-
-            // let cen = triship.entity.body.generation.new.shape.centroid();
-            // r.draw_text_ex(
-            //     r.get_font_default(),
-            //     &format!("{}, {}", cen.x, cen.y),
-            //     ent.v3,
-            //     10.0,
-            //     1.0,
-            //     Color::WHITE,
-            // );
-
-            r.draw_rectangle_lines_ex(
-                // Rectangle {
-                //     x: triship.entity.body.polygon.bounds.,
-                //     y: todo!(),
-                //     width: todo!(),
-                //     height: todo!(),
-                // },
-                triship.entity.body.polygon.bounds,
+            let deg = gen.new.rotation.y.atan2(gen.new.rotation.x).to_degrees();
+            r.draw_text_ex(
+                r.get_font_default(),
+                &format!("{}", deg),
+                ent.v1,
+                10.0,
                 1.0,
-                triship.entity.body.color,
+                Color::WHITE,
             );
+
+            let vel = triship.entity.motion.velocity;
+            r.draw_text_ex(
+                r.get_font_default(),
+                &format!("{}, {}", vel.x, vel.y),
+                ent.v2,
+                10.0,
+                1.0,
+                Color::WHITE,
+            );
+
+            let cen = triship.entity.body.generation.new.shape.centroid();
+            r.draw_text_ex(
+                r.get_font_default(),
+                &format!("{}, {}", cen.x, cen.y),
+                ent.v3,
+                10.0,
+                1.0,
+                Color::WHITE,
+            );
+
+            r.draw_rectangle_lines_ex(bounds, 1.0, triship.entity.body.color);
         }
 
         for exhaust in &entities.exhausts {
-            if exhaust.entity.body.cull(viewport) {
+            let bounds = exhaust.entity.body.polygon.bounds.lerp(delta);
+
+            if bounds.cull(viewport) {
                 continue;
             }
 
@@ -94,7 +88,9 @@ impl Renderer {
         }
 
         for projectile in &entities.projectiles {
-            if projectile.entity.body.cull(viewport) {
+            let bounds = projectile.entity.body.polygon.bounds.lerp(delta);
+
+            if bounds.cull(viewport) {
                 continue;
             }
 

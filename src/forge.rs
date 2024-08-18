@@ -22,6 +22,8 @@ impl Forge {
             rotation: d,
         };
 
+        let bounds = Rectangle::new(0.0, 0.0, 0.0, 0.0);
+
         Triship {
             life: 10.0,
             body: Body {
@@ -33,7 +35,10 @@ impl Forge {
                 polygon: Polygon {
                     dirty: true,
                     vertexes: Vec::new(),
-                    bounds: Rectangle::new(0.0, 0.0, 0.0, 0.0),
+                    bounds: Generation {
+                        old: bounds,
+                        new: bounds,
+                    },
                 },
             },
             motion: Motion {
@@ -74,7 +79,7 @@ impl Forge {
             },
             rotation: direction,
         };
-
+        let bounds = Rectangle::new(0.0, 0.0, 0.0, 0.0);
         let speed = 20.0;
 
         Projectile {
@@ -88,7 +93,10 @@ impl Forge {
                 polygon: Polygon {
                     dirty: true,
                     vertexes: Vec::new(),
-                    bounds: Rectangle::new(0.0, 0.0, 0.0, 0.0),
+                    bounds: Generation {
+                        old: bounds,
+                        new: bounds,
+                    },
                 },
             },
             motion: Motion {
@@ -115,6 +123,7 @@ impl Forge {
             shape: position,
             rotation,
         };
+        let bounds = Rectangle::new(0.0, 0.0, 0.0, 0.0);
 
         Particle {
             lifetime,
@@ -127,7 +136,10 @@ impl Forge {
                 polygon: Polygon {
                     dirty: true,
                     vertexes: Vec::new(),
-                    bounds: Rectangle::new(0.0, 0.0, 0.0, 0.0),
+                    bounds: Generation {
+                        old: bounds,
+                        new: bounds,
+                    },
                 },
             },
             motion: Motion {
