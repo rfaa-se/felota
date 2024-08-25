@@ -12,7 +12,7 @@ use crate::{
     entities::{Entities, Entity},
     forge::Forge,
     logic::Logic,
-    messages::{Message, NetMessage, NetRequestMessage},
+    messages::{EngineRequestMessage, Message, NetMessage, NetRequestMessage},
     render::Renderer,
 };
 
@@ -53,6 +53,7 @@ struct PlayerData {
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum Action {
     Command(Command),
+    ToggleInterpolation,
 }
 
 impl Play {
@@ -152,6 +153,12 @@ impl Play {
     }
 
     pub fn input(&mut self, h: &mut RaylibHandle) {
+        // options
+        if h.is_key_pressed(KeyboardKey::KEY_F1) {
+            self.actions.insert(Action::ToggleInterpolation);
+        }
+
+        // gameplay
         if h.is_key_down(KeyboardKey::KEY_LEFT) {
             self.actions.insert(Action::Command(Command::RotateLeft));
         }
@@ -194,8 +201,8 @@ impl Play {
                 height: self.camera.offset.y * 2.0 - 200.0,
             };
 
-            self.renderer.draw(&mut r, &self.entities, viewport, delta);
             self.logic.draw(&mut r);
+            self.renderer.draw(&mut r, &self.entities, viewport, delta);
         }
 
         if self.stalling {
@@ -255,7 +262,7 @@ impl Play {
                     self.synchronized = true;
                 }
                 NetMessage::Commands(cid, tick, cmds) => {
-                    // TODO: this might panic, investigate
+                    // TODO: this might panic, investigate, make sure the index exists before we access it?
                     let tick_commands = &mut self.commands[*tick as usize];
 
                     // add the client's commands
@@ -272,7 +279,7 @@ impl Play {
                 _ => return,
             },
             _ => return,
-        };
+        }
     }
 
     fn draw_hud(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, _delta: f32) {
@@ -290,11 +297,14 @@ impl Play {
         self.entities.add(entity)
     }
 
-    fn action(&mut self, _bus: &mut Bus) {
+    fn action(&mut self, bus: &mut Bus) {
         while let Some(action) = self.actions.pop_last() {
             match action {
                 Action::Command(cmd) => {
                     self.command_queue.insert(cmd);
+                }
+                Action::ToggleInterpolation => {
+                    bus.send(EngineRequestMessage::ToggleInterpolation);
                 }
             }
         }

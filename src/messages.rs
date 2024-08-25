@@ -4,6 +4,19 @@ use crate::{commands::Command, states::State};
 pub enum Message {
     State(StateMessage),
     Net(NetMessage),
+    Engine(EngineMessage),
+}
+
+#[derive(Debug)]
+pub enum EngineMessage {
+    Request(EngineRequestMessage),
+    #[allow(dead_code)]
+    ToggleInterpolation(bool),
+}
+
+#[derive(Debug)]
+pub enum EngineRequestMessage {
+    ToggleInterpolation,
 }
 
 #[derive(Debug)]
@@ -73,5 +86,23 @@ impl Into<Message> for NetRequestMessage {
 impl Into<NetMessage> for NetRequestMessage {
     fn into(self) -> NetMessage {
         NetMessage::Request(self)
+    }
+}
+
+impl Into<Message> for EngineMessage {
+    fn into(self) -> Message {
+        Message::Engine(self)
+    }
+}
+
+impl Into<Message> for EngineRequestMessage {
+    fn into(self) -> Message {
+        Message::Engine(self.into())
+    }
+}
+
+impl Into<EngineMessage> for EngineRequestMessage {
+    fn into(self) -> EngineMessage {
+        EngineMessage::Request(self)
     }
 }

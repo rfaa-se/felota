@@ -86,7 +86,7 @@ fn handle_accelerate(
     let (rotation, motion) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
-            (e.body.generation.new.rotation, &mut e.motion)
+            (e.body.state.new.rotation, &mut e.motion)
         }
         _ => return,
     };
@@ -95,12 +95,15 @@ fn handle_accelerate(
 
     // spawn exhaust particles if it's a triship
     if let EntityIndex::Triship(idx) = eidx {
-        let orignator_velocity = motion.velocity;
+        let initial_velocity = motion.velocity;
         let triship = &entities.triships[idx].entity;
-        let body = &triship.body.polygon.vertexes;
+        let vertexes = &triship.body.polygon.vertexes.new;
 
         // calculate the placement position of the afterburner
-        let position = Vector2::new((body[0].x + body[2].x) / 2.0, (body[0].y + body[2].y) / 2.0);
+        let position = Vector2::new(
+            (vertexes[0].x + vertexes[2].x) / 2.0,
+            (vertexes[0].y + vertexes[2].y) / 2.0,
+        );
 
         // rotate 180 degrees, we want the exhaust to be pointed away from the rotation of the entity
         let exhaust_rotation = Vector2 {
@@ -108,8 +111,7 @@ fn handle_accelerate(
             y: rotation.y * -1.0,
         };
 
-        for exhaust in forge.exhaust_afterburner(position, exhaust_rotation, orignator_velocity, h)
-        {
+        for exhaust in forge.exhaust_afterburner(position, exhaust_rotation, initial_velocity, h) {
             entities.add(Entity::Exhaust(exhaust));
         }
     }
@@ -124,7 +126,7 @@ fn handle_decelerate(
     let (rotation, motion) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
-            (e.body.generation.new.rotation, &mut e.motion)
+            (e.body.state.new.rotation, &mut e.motion)
         }
         _ => return,
     };
@@ -144,7 +146,7 @@ fn handle_rotate_left(
     let (motion, old_rotation) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
-            (&mut e.motion, e.body.generation.old.rotation)
+            (&mut e.motion, e.body.state.old.rotation)
         }
         _ => return,
     };
@@ -154,8 +156,8 @@ fn handle_rotate_left(
     // spawn exhaust particles if it's a triship
     if let EntityIndex::Triship(idx) = eidx {
         let triship = &entities.triships[idx].entity;
-        let originator_velocity = triship.motion.velocity;
-        let vertexes = &triship.body.polygon.vertexes;
+        let initial_velocity = triship.motion.velocity;
+        let vertexes = &triship.body.polygon.vertexes.new;
 
         // calculate the placement position of the thruster
         let position = Vector2::new(
@@ -169,8 +171,7 @@ fn handle_rotate_left(
             y: old_rotation.x,
         };
 
-        for exhaust in
-            forge.exhaust_thruster_side(position, exhaust_rotation, originator_velocity, h)
+        for exhaust in forge.exhaust_thruster_side(position, exhaust_rotation, initial_velocity, h)
         {
             entities.add(Entity::Exhaust(exhaust));
         }
@@ -186,7 +187,7 @@ fn handle_rotate_right(
     let (motion, old_rotation) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
-            (&mut e.motion, e.body.generation.old.rotation)
+            (&mut e.motion, e.body.state.old.rotation)
         }
         _ => return,
     };
@@ -196,8 +197,8 @@ fn handle_rotate_right(
     // spawn exhaust particles if it's a triship
     if let EntityIndex::Triship(idx) = eidx {
         let triship = &entities.triships[idx].entity;
-        let originator_velocity = triship.motion.velocity;
-        let vertexes = &triship.body.polygon.vertexes;
+        let initial_velocity = triship.motion.velocity;
+        let vertexes = &triship.body.polygon.vertexes.new;
 
         // calculate the placement position of the thruster
         let position = Vector2::new(
@@ -211,8 +212,7 @@ fn handle_rotate_right(
             y: old_rotation.x * -1.0,
         };
 
-        for exhaust in
-            forge.exhaust_thruster_side(position, exhaust_rotation, originator_velocity, h)
+        for exhaust in forge.exhaust_thruster_side(position, exhaust_rotation, initial_velocity, h)
         {
             entities.add(Entity::Exhaust(exhaust));
         }
@@ -228,8 +228,8 @@ fn handle_projectile(entities: &mut Entities, eidx: EntityIndex, id: usize, forg
         _ => return,
     };
 
-    let rotation = body.generation.new.rotation;
-    let position = body.polygon.vertexes[1];
+    let rotation = body.state.new.rotation;
+    let position = body.polygon.vertexes.new[1];
     let projectile = forge.projectile(position, rotation, velocity, id);
 
     entities.add(Entity::Projectile(projectile));

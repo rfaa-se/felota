@@ -12,8 +12,8 @@ impl Forge {
     }
 
     pub fn triship(&self) -> Triship {
-        let d = Direction::NORTH;
-        let shape = RotatedShape {
+        let d = Direction::SOUTHEAST;
+        let s = RotatedShape {
             shape: Triangle {
                 v1: Vector2::new(50.0, 50.0),
                 v2: Vector2::new(110.0, 75.0),
@@ -21,24 +21,24 @@ impl Forge {
             },
             rotation: d,
         };
-
-        let bounds = Rectangle::new(0.0, 0.0, 0.0, 0.0);
+        let v = s.shape.vertexes(d);
+        let b = v.bounds();
+        let v_gen = Generation {
+            old: v.clone(),
+            new: v,
+        };
+        let b_gen = Generation { old: b, new: b };
 
         Triship {
             life: 10.0,
             body: Body {
-                generation: Generation {
-                    old: shape,
-                    new: shape,
-                },
+                state: Generation { old: s, new: s },
                 color: Color::RED,
                 polygon: Polygon {
-                    dirty: true,
-                    vertexes: Vec::new(),
-                    bounds: Generation {
-                        old: bounds,
-                        new: bounds,
-                    },
+                    dirty: false,
+                    vertexes: v_gen,
+                    bounds_real: b_gen,
+                    bounds_meld: b_gen,
                 },
             },
             motion: Motion {
@@ -46,7 +46,7 @@ impl Forge {
                 speed_max: 20.0,
                 acceleration: 1.02,
                 rotation_speed: 0.0,
-                rotation_acceleration: 0.04,
+                rotation_acceleration: 0.02,
                 rotation_speed_max: 0.24,
             },
         }
@@ -69,40 +69,41 @@ impl Forge {
         let width = 2.0;
         let height = 1.0;
         let distance = direction * (width / 2.0);
-        let position = Vector2::new(position.x + distance.x, position.y + distance.y);
-        let shape = RotatedShape {
+        let p = Vector2::new(position.x + distance.x, position.y + distance.y);
+        let s = RotatedShape {
             shape: Rectangle {
-                x: position.x - width / 2.0,
-                y: position.y - height / 2.0,
+                x: p.x - width / 2.0,
+                y: p.y - height / 2.0,
                 width,
                 height,
             },
             rotation: direction,
         };
-        let bounds = Rectangle::new(0.0, 0.0, 0.0, 0.0);
-        let speed = 20.0;
+        let v = s.shape.vertexes(direction);
+        let b = v.bounds();
+        let v_gen = Generation {
+            old: v.clone(),
+            new: v,
+        };
+        let b_gen = Generation { old: b, new: b };
+        let speed = 30.0;
 
         Projectile {
             damage: 2.0,
             body: Body {
-                generation: Generation {
-                    old: shape,
-                    new: shape,
-                },
+                state: Generation { old: s, new: s },
                 color: Color::LIGHTGOLDENRODYELLOW,
                 polygon: Polygon {
-                    dirty: true,
-                    vertexes: Vec::new(),
-                    bounds: Generation {
-                        old: bounds,
-                        new: bounds,
-                    },
+                    dirty: false,
+                    vertexes: v_gen,
+                    bounds_real: b_gen,
+                    bounds_meld: b_gen,
                 },
             },
             motion: Motion {
                 velocity: initial_velocity + direction * speed,
                 acceleration: 1.1,
-                speed_max: 30.0,
+                speed_max: 40.0,
                 rotation_speed: 0.0,
                 rotation_acceleration: 0.0,
                 rotation_speed_max: 0.0,
@@ -119,27 +120,28 @@ impl Forge {
         velocity: Vector2,
         acceleration: f32,
     ) -> Particle {
-        let shape = RotatedShape {
+        let s = RotatedShape {
             shape: position,
             rotation,
         };
-        let bounds = Rectangle::new(0.0, 0.0, 0.0, 0.0);
+        let v = s.shape.vertexes(rotation);
+        let b = v.bounds();
+        let v_gen = Generation {
+            old: v.clone(),
+            new: v,
+        };
+        let b_gen = Generation { old: b, new: b };
 
         Particle {
             lifetime,
             body: Body {
-                generation: Generation {
-                    old: shape,
-                    new: shape,
-                },
+                state: Generation { old: s, new: s },
                 color: Color::LIGHTSKYBLUE,
                 polygon: Polygon {
-                    dirty: true,
-                    vertexes: Vec::new(),
-                    bounds: Generation {
-                        old: bounds,
-                        new: bounds,
-                    },
+                    dirty: false,
+                    vertexes: v_gen,
+                    bounds_real: b_gen,
+                    bounds_meld: b_gen,
                 },
             },
             motion: Motion {
@@ -194,9 +196,11 @@ impl Forge {
 
                 // some random values to make it look awesome
                 let lifetime = (h.get_random_value::<i32>(0..4) + j) as u8;
-                let speed = h.get_random_value::<i32>(1..6) as f32;
+                let speed = h.get_random_value::<i32>(2..10) as f32;
                 let velocity = initial_velocity + rotation * speed;
-                let acceleration = h.get_random_value::<i32>(1..4) as f32 / speed;
+                let acceleration = h.get_random_value::<i32>(1..4) as f32;
+                // let velocity = velocity.clamp(-20.0..20.0);
+                // println!("{:?}", velocity);
 
                 // clamp shit!? once ship is heading in a straight line, the afterburner gets smaller
 
@@ -237,7 +241,7 @@ impl Forge {
                 let lifetime = (h.get_random_value::<i32>(0..4) + j) as u8;
                 let speed = h.get_random_value::<i32>(1..6) as f32;
                 let velocity = initial_velocity + rotation * speed;
-                let acceleration = h.get_random_value::<i32>(1..4) as f32 / speed;
+                let acceleration = h.get_random_value::<i32>(1..4) as f32;
 
                 exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration));
             }

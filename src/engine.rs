@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
+
 use raylib::prelude::*;
 
 use crate::{
     bus::Bus,
     constants::{DEBUG_COLOR, RENDER_HEIGHT, RENDER_WIDTH, WINDOW_HEIGHT, WINDOW_WIDTH},
-    messages::{Message, StateRequestMessage},
+    messages::{EngineMessage, EngineRequestMessage, Message, StateRequestMessage},
     states::State,
     systems::Systems,
 };
@@ -19,6 +21,13 @@ pub struct Engine {
 pub struct System {
     tps_current: u32,
     tps_counter: u32,
+    interpolate: bool,
+    actions: BTreeSet<Action>,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Action {
+    ToggleInterpolation,
 }
 
 impl Engine {
@@ -94,7 +103,11 @@ impl Engine {
                 let r = &mut d.begin_texture_mode(&self.thread, &mut self.render_texture);
 
                 // delta is used to smooth movement while interpolating between old and new states
-                let delta = accumulator / size;
+                let delta = if s.engine.interpolate {
+                    accumulator / size
+                } else {
+                    1.0
+                };
 
                 // paint it black
                 r.clear_background(Color::BLACK);
@@ -137,15 +150,42 @@ impl System {
         Self {
             tps_current: 0,
             tps_counter: 0,
+            interpolate: true,
+            actions: BTreeSet::new(),
         }
     }
 
-    pub fn update(&mut self, _h: &mut RaylibHandle, _bus: &mut Bus) {}
+    pub fn update(&mut self, _h: &mut RaylibHandle, bus: &mut Bus) {
+        self.action(bus);
+    }
 
     pub fn draw(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, _delta: f32) {
         r.draw_text(&format!("fps {}", r.get_fps()), 3, 2, 10, DEBUG_COLOR);
         r.draw_text(&format!("tps {}", self.tps_current), 3, 12, 10, DEBUG_COLOR);
     }
 
-    pub fn message(&mut self, _msg: &Message) {}
+    pub fn message(&mut self, msg: &Message) {
+        match msg {
+            Message::Engine(msg) => match msg {
+                EngineMessage::Request(msg) => match msg {
+                    EngineRequestMessage::ToggleInterpolation => {
+                        self.actions.insert(Action::ToggleInterpolation);
+                    }
+                },
+                _ => return,
+            },
+            _ => return,
+        }
+    }
+
+    fn action(&mut self, bus: &mut Bus) {
+        while let Some(action) = self.actions.pop_last() {
+            match action {
+                Action::ToggleInterpolation => {
+                    self.interpolate = !self.interpolate;
+                    bus.send(EngineMessage::ToggleInterpolation(self.interpolate));
+                }
+            }
+        }
+    }
 }

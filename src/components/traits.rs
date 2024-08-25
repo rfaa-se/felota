@@ -26,8 +26,8 @@ pub trait Lerpable<T> {
     fn lerp(&self, amount: f32) -> T;
 }
 
-pub trait Regeneratable {
-    fn regenerate(&mut self);
+pub trait Generationable {
+    fn generation(&mut self);
 }
 
 pub trait Acceleratable {
@@ -117,7 +117,7 @@ impl Lerpable<Vector2> for Generation<RotatedShape<Vector2>> {
 
 impl<T> Rotatable for Body<T> {
     fn rotate(&mut self, amount: f32) {
-        let rot = &mut self.generation.new.rotation;
+        let rot = &mut self.state.new.rotation;
         let rad = rot.y.atan2(rot.x) + amount;
 
         (rot.y, rot.x) = rad.sin_cos();
@@ -128,34 +128,34 @@ impl<T> Rotatable for Body<T> {
     }
 }
 
-impl Acceleratable for Body<Triangle> {
+impl Acceleratable for Triangle {
     fn accelerate(&mut self, by: Vector2) {
-        let new = &mut self.generation.new.shape;
-        new.v1 += by;
-        new.v2 += by;
-        new.v3 += by;
-
-        if by.x != 0.0 || by.y != 0.0 {
-            self.polygon.dirty = true;
-        }
+        self.v1 += by;
+        self.v2 += by;
+        self.v3 += by;
     }
 }
 
-impl Acceleratable for Body<Rectangle> {
+impl Acceleratable for Rectangle {
     fn accelerate(&mut self, by: Vector2) {
-        let new = &mut self.generation.new.shape;
-        new.x += by.x;
-        new.y += by.y;
-
-        if by.x != 0.0 || by.y != 0.0 {
-            self.polygon.dirty = true;
-        }
+        self.x += by.x;
+        self.y += by.y;
     }
 }
 
-impl Acceleratable for Body<Vector2> {
+impl Acceleratable for Vector2 {
     fn accelerate(&mut self, by: Vector2) {
-        self.generation.new.shape += by;
+        self.x += by.x;
+        self.y += by.y;
+    }
+}
+
+impl<T> Acceleratable for Body<T>
+where
+    T: Acceleratable,
+{
+    fn accelerate(&mut self, by: Vector2) {
+        self.state.new.shape.accelerate(by);
 
         if by.x != 0.0 || by.y != 0.0 {
             self.polygon.dirty = true;
@@ -242,6 +242,30 @@ impl Boundable for Vec<Vector2> {
     }
 }
 
+impl Boundable for Generation<Rectangle> {
+    fn bounds(&self) -> Rectangle {
+        let (min_x, max_x) = minmax(self.old.x, self.new.x);
+        let (min_y, max_y) = minmax(self.old.y, self.new.y);
+        let max_w = self.old.width.max(self.new.width);
+        let max_h = self.old.height.max(self.new.height);
+
+        fn minmax(one: f32, two: f32) -> (f32, f32) {
+            if one < two {
+                (one, two)
+            } else {
+                (two, one)
+            }
+        }
+
+        Rectangle {
+            x: min_x,
+            y: min_y,
+            width: max_x + max_w - min_x,
+            height: max_y + max_h - min_y,
+        }
+    }
+}
+
 impl<T> Renewable for Body<T>
 where
     T: Vertexable,
@@ -251,24 +275,32 @@ where
             return;
         }
 
-        self.polygon.vertexes = self
-            .generation
-            .new
-            .shape
-            .vertexes(self.generation.new.rotation);
-
-        self.polygon.bounds.new = self.polygon.vertexes.bounds();
+        self.polygon.vertexes.new = self.state.new.shape.vertexes(self.state.new.rotation);
+        self.polygon.bounds_real.new = self.polygon.vertexes.new.bounds();
+        self.polygon.bounds_meld.new = self.polygon.bounds_real.bounds();
 
         self.polygon.dirty = false;
     }
 }
 
-impl<T> Regeneratable for Generation<T>
+impl<T> Generationable for Generation<T>
 where
     T: Copy,
 {
-    fn regenerate(&mut self) {
+    fn generation(&mut self) {
         self.old = self.new;
+    }
+}
+
+impl<T> Generationable for Body<T>
+where
+    T: Copy,
+{
+    fn generation(&mut self) {
+        self.state.generation();
+        self.polygon.vertexes.old = self.polygon.vertexes.new.clone();
+        self.polygon.bounds_real.generation();
+        self.polygon.bounds_meld.generation();
     }
 }
 

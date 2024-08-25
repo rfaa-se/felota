@@ -14,7 +14,7 @@ pub struct Triangle {
 }
 
 pub struct Body<T> {
-    pub generation: Generation<RotatedShape<T>>,
+    pub state: Generation<RotatedShape<T>>,
     pub color: Color,
     pub polygon: Polygon,
 }
@@ -42,8 +42,9 @@ pub struct Motion {
 
 pub struct Polygon {
     pub dirty: bool,
-    pub vertexes: Vec<Vector2>,
-    pub bounds: Generation<Rectangle>,
+    pub vertexes: Generation<Vec<Vector2>>,
+    pub bounds_real: Generation<Rectangle>,
+    pub bounds_meld: Generation<Rectangle>,
 }
 
 // TODO: move me?

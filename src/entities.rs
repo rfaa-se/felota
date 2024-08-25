@@ -31,15 +31,18 @@ pub struct Entities {
 }
 
 pub struct Triship {
+    #[allow(dead_code)]
     pub life: f32,
     pub body: Body<Triangle>,
     pub motion: Motion,
 }
 
 pub struct Projectile {
+    #[allow(dead_code)]
     pub damage: f32,
     pub body: Body<Rectangle>,
     pub motion: Motion,
+    #[allow(dead_code)]
     pub owner_id: usize,
 }
 
@@ -116,7 +119,7 @@ impl Entities {
 
         let (old, new) = match eidx {
             EntityIndex::Triship(idx) => {
-                let gen = &self.triships[idx].entity.body.generation;
+                let gen = &self.triships[idx].entity.body.state;
                 (
                     &gen.old.shape as &dyn Centroidable,
                     &gen.new.shape as &dyn Centroidable,
@@ -146,7 +149,6 @@ fn swap_dead<T>(
 
     // update reference for the swapped entity
     if let Some(swap) = entities.get_mut(idx) {
-        swap.id = dead.id;
         map.insert(swap.id, dead_ref);
     }
 }

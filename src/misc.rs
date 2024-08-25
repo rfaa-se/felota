@@ -1,7 +1,8 @@
 use crate::entities::{Entities, EntityIndex};
 use raylib::prelude::*;
 
-const MAX_SIZE: usize = 10;
+const MAX_SIZE: usize = 4;
+const MAX_DEPTH: u8 = 8;
 
 pub struct QuadTree {
     pub root: Node,
@@ -11,10 +12,11 @@ pub struct QuadTree {
 pub struct Node {
     pub node_type: NodeType,
     dimension: Rectangle,
+    depth: u8,
 }
 
 pub enum NodeType {
-    Leaf(Vec<EntityIndex>),
+    Leaf(Vec<(EntityIndex, usize)>),
     Branch([Box<Node>; 4]),
 }
 
@@ -31,6 +33,7 @@ impl QuadTree {
             root: Node {
                 node_type: NodeType::Leaf(Vec::new()),
                 dimension: initial,
+                depth: 0,
             },
             initial,
         }
@@ -40,6 +43,7 @@ impl QuadTree {
         self.root = Node {
             node_type: NodeType::Leaf(Vec::new()),
             dimension: self.initial,
+            depth: 0,
         };
     }
 
@@ -49,9 +53,9 @@ impl QuadTree {
             None => return,
         };
 
-        let bounds = get_bounds(eidx, entities);
+        let bounds = bounds(eidx, entities);
 
-        self.root.add(eidx, bounds, entities);
+        self.root.add(eid, eidx, bounds, entities);
     }
 
     pub fn draw(&self, r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>) {
@@ -72,44 +76,44 @@ impl QuadTree {
     }
 }
 
-fn get_bounds(eidx: EntityIndex, entities: &Entities) -> Rectangle {
+fn bounds(eidx: EntityIndex, entities: &Entities) -> Rectangle {
     match eidx {
         EntityIndex::Triship(idx) => &entities.triships[idx].entity.body.polygon,
         EntityIndex::Projectile(idx) => &entities.projectiles[idx].entity.body.polygon,
         EntityIndex::Exhaust(idx) => &entities.exhausts[idx].entity.body.polygon,
     }
-    .bounds
+    .bounds_meld
     .new
 }
 
 impl Node {
-    fn add(&mut self, eidx: EntityIndex, bounds: Rectangle, entities: &Entities) {
+    fn add(&mut self, eid: usize, eidx: EntityIndex, bounds: Rectangle, entities: &Entities) {
         match &mut self.node_type {
-            NodeType::Leaf(eidxs) => {
+            NodeType::Leaf(ents) => {
                 if !self.dimension.check_collision_recs(&bounds) {
                     return;
                 }
 
-                if eidxs.len() == MAX_SIZE {
+                if self.depth != MAX_DEPTH && ents.len() == MAX_SIZE {
                     self.divide(entities);
-                    self.add(eidx, bounds, entities);
+                    self.add(eid, eidx, bounds, entities);
 
                     return;
                 }
 
-                eidxs.push(eidx);
+                ents.push((eidx, eid));
             }
             NodeType::Branch(nodes) => {
                 for node in nodes {
-                    node.add(eidx, bounds, entities);
+                    node.add(eid, eidx, bounds, entities);
                 }
             }
         };
     }
 
     fn divide(&mut self, entities: &Entities) {
-        let eidxs = match &self.node_type {
-            NodeType::Leaf(eidxs) => eidxs,
+        let ents = match &self.node_type {
+            NodeType::Leaf(ents) => ents,
             NodeType::Branch(_) => return,
         };
 
@@ -117,6 +121,7 @@ impl Node {
         let y = self.dimension.y;
         let width = self.dimension.width / 2.0;
         let height = self.dimension.height / 2.0;
+        let depth = self.depth + 1;
         let mut nodes = [
             Box::new(Node {
                 node_type: NodeType::Leaf(Vec::new()),
@@ -126,6 +131,7 @@ impl Node {
                     width,
                     height,
                 },
+                depth,
             }),
             Box::new(Node {
                 node_type: NodeType::Leaf(Vec::new()),
@@ -135,6 +141,7 @@ impl Node {
                     width,
                     height,
                 },
+                depth,
             }),
             Box::new(Node {
                 node_type: NodeType::Leaf(Vec::new()),
@@ -144,6 +151,7 @@ impl Node {
                     width,
                     height,
                 },
+                depth,
             }),
             Box::new(Node {
                 node_type: NodeType::Leaf(Vec::new()),
@@ -153,14 +161,15 @@ impl Node {
                     width,
                     height,
                 },
+                depth,
             }),
         ];
 
-        for eidx in eidxs {
-            let bounds = get_bounds(*eidx, entities);
+        for (eidx, eid) in ents {
+            let bounds = bounds(*eidx, entities);
 
             for node in nodes.iter_mut() {
-                node.add(*eidx, bounds, entities);
+                node.add(*eid, *eidx, bounds, entities);
             }
         }
 

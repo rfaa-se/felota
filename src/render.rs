@@ -21,13 +21,13 @@ impl Renderer {
         delta: f32,
     ) {
         for triship in &entities.triships {
-            let bounds = triship.entity.body.polygon.bounds.lerp(delta);
+            let bounds = triship.entity.body.polygon.bounds_real.lerp(delta);
 
             if bounds.cull(viewport) {
                 continue;
             }
 
-            let gen = &triship.entity.body.generation;
+            let gen = &triship.entity.body.state;
             let rot = gen.old.rotation.lerp(gen.new.rotation, delta);
             let rad = rot.y.atan2(rot.x);
             let (sin, cos) = rad.sin_cos();
@@ -61,7 +61,7 @@ impl Renderer {
                 Color::WHITE,
             );
 
-            let cen = triship.entity.body.generation.new.shape.centroid();
+            let cen = triship.entity.body.state.new.shape.centroid();
             r.draw_text_ex(
                 r.get_font_default(),
                 &format!("{}, {}", cen.x, cen.y),
@@ -71,30 +71,33 @@ impl Renderer {
                 Color::WHITE,
             );
 
-            r.draw_rectangle_lines_ex(bounds, 1.0, triship.entity.body.color);
+            r.draw_rectangle_lines_ex(bounds, 1.0, Color::BLUE);
+
+            let bounds = &triship.entity.body.polygon.bounds_meld.lerp(delta);
+            r.draw_rectangle_lines_ex(bounds, 1.0, Color::BLUE);
         }
 
         for exhaust in &entities.exhausts {
-            let bounds = exhaust.entity.body.polygon.bounds.lerp(delta);
+            let bounds = exhaust.entity.body.polygon.bounds_real.lerp(delta);
 
             if bounds.cull(viewport) {
                 continue;
             }
 
-            let gen = &exhaust.entity.body.generation;
+            let gen = &exhaust.entity.body.state;
             let ent = gen.lerp(delta);
 
             r.draw_pixel_v(ent, exhaust.entity.body.color);
         }
 
         for projectile in &entities.projectiles {
-            let bounds = projectile.entity.body.polygon.bounds.lerp(delta);
+            let bounds = projectile.entity.body.polygon.bounds_real.lerp(delta);
 
             if bounds.cull(viewport) {
                 continue;
             }
 
-            let gen = projectile.entity.body.generation;
+            let gen = projectile.entity.body.state;
             let rot = gen.old.rotation.lerp(gen.new.rotation, delta);
             let rad = rot.y.atan2(rot.x);
             let deg = rad.to_degrees();
