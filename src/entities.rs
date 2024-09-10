@@ -9,12 +9,14 @@ pub enum EntityIndex {
     Triship(usize),
     Projectile(usize),
     Exhaust(usize),
+    Explosion(usize),
 }
 
 pub enum Entity {
     Triship(Triship),
     Projectile(Projectile),
     Exhaust(Particle),
+    Explosion(Particle),
 }
 
 pub struct EntityId<T> {
@@ -26,23 +28,23 @@ pub struct Entities {
     pub triships: Vec<EntityId<Triship>>,
     pub projectiles: Vec<EntityId<Projectile>>,
     pub exhausts: Vec<EntityId<Particle>>,
+    pub explosions: Vec<EntityId<Particle>>,
+
     id_map: HashMap<usize, EntityIndex>,
     id_free: usize,
 }
 
 pub struct Triship {
-    #[allow(dead_code)]
     pub life: f32,
     pub body: Body<Triangle>,
     pub motion: Motion,
+    pub boost: Boost,
 }
 
 pub struct Projectile {
-    #[allow(dead_code)]
     pub damage: f32,
     pub body: Body<Rectangle>,
     pub motion: Motion,
-    #[allow(dead_code)]
     pub owner_id: usize,
 }
 
@@ -58,6 +60,7 @@ impl Entities {
             triships: Vec::new(),
             projectiles: Vec::new(),
             exhausts: Vec::new(),
+            explosions: Vec::new(),
 
             id_map: HashMap::new(),
             id_free: 0,
@@ -86,6 +89,10 @@ impl Entities {
                 self.exhausts.push(EntityId { id, entity });
                 EntityIndex::Exhaust(self.exhausts.len() - 1)
             }
+            Entity::Explosion(entity) => {
+                self.explosions.push(EntityId { id, entity });
+                EntityIndex::Explosion(self.explosions.len() - 1)
+            }
         };
 
         self.id_map.insert(id, eidx);
@@ -108,6 +115,7 @@ impl Entities {
                 EntityIndex::Triship(idx) => swap_dead(&mut self.triships, map, *idx),
                 EntityIndex::Projectile(idx) => swap_dead(&mut self.projectiles, map, *idx),
                 EntityIndex::Exhaust(idx) => swap_dead(&mut self.exhausts, map, *idx),
+                EntityIndex::Explosion(idx) => swap_dead(&mut self.explosions, map, *idx),
             }
         }
     }

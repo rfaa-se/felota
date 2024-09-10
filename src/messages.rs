@@ -1,10 +1,16 @@
-use crate::{commands::Command, states::State};
+use crate::{commands::Command, entities::EntityIndex, states::State};
 
 #[derive(Debug)]
 pub enum Message {
     State(StateMessage),
     Net(NetMessage),
     Engine(EngineMessage),
+    Logic(LogicMessage),
+}
+
+#[derive(Debug)]
+pub enum LogicMessage {
+    EntityDead(usize, EntityIndex),
 }
 
 #[derive(Debug)]
@@ -104,5 +110,11 @@ impl Into<Message> for EngineRequestMessage {
 impl Into<EngineMessage> for EngineRequestMessage {
     fn into(self) -> EngineMessage {
         EngineMessage::Request(self)
+    }
+}
+
+impl Into<Message> for LogicMessage {
+    fn into(self) -> Message {
+        Message::Logic(self)
     }
 }

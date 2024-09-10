@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 use raylib::prelude::*;
 
@@ -7,12 +7,13 @@ use crate::{
     commands::{Command, EntityCommands},
     components::Generation,
     constants::{
-        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH, TICK_SCHEDULED,
+        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH, RESPAWN_TIMER,
+        TICK_SCHEDULED,
     },
-    entities::{Entities, Entity},
+    entities::{Entities, Entity, EntityIndex},
     forge::Forge,
     logic::Logic,
-    messages::{EngineRequestMessage, Message, NetMessage, NetRequestMessage},
+    messages::{EngineRequestMessage, LogicMessage, Message, NetMessage, NetRequestMessage},
     render::Renderer,
 };
 
@@ -29,7 +30,7 @@ pub struct Play {
     logic: Logic,
     renderer: Renderer,
     commands: Vec<TickCommands>,
-    command_queue: HashSet<Command>,
+    command_queue: BTreeSet<Command>,
     actions: BTreeSet<Action>,
 }
 
@@ -45,9 +46,10 @@ struct NetworkData {
 }
 
 struct PlayerData {
-    player_id: usize,
-    player_ids: Vec<usize>,
+    player_entity_id: usize,
+    entity_ids: Vec<usize>,
     map: HashMap<u32, usize>,
+    respawn_timers: Vec<(usize, u8)>,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -68,9 +70,10 @@ impl Play {
                 seed: 0,
             },
             player_data: PlayerData {
-                player_id: 0,
-                player_ids: Vec::new(),
+                player_entity_id: 0,
+                entity_ids: Vec::new(),
                 map: HashMap::new(),
+                respawn_timers: Vec::new(),
             },
             camera: Camera2D {
                 offset: Vector2 {
@@ -90,7 +93,7 @@ impl Play {
             logic: Logic::new(),
             renderer: Renderer::new(),
             commands: Vec::new(),
-            command_queue: HashSet::new(),
+            command_queue: BTreeSet::new(),
             actions: BTreeSet::new(),
         }
     }
@@ -130,17 +133,24 @@ impl Play {
             h,
         );
 
+        self.update_respawns();
+
         // the player centroid is used to set the camera target,
         // we want the player entity to be positioned in the middle of the screen,
         // this is why the camera is created with an offset and we only update the target
-        if let Some(centroid) = self.entities.centroid(self.player_data.player_id) {
+        if let Some(centroid) = self.entities.centroid(self.player_data.player_entity_id) {
             self.camera_target = centroid;
+        }
+
+        let mut q = Vec::new();
+        while let Some(c) = self.command_queue.pop_first() {
+            q.push(c);
         }
 
         // send the current command queue
         bus.send(NetRequestMessage::Commands(
             self.tick + TICK_SCHEDULED,
-            self.command_queue.drain().collect(),
+            q.into_boxed_slice(),
         ));
 
         // make sure we can receive the new commands
@@ -177,6 +187,10 @@ impl Play {
 
         if h.is_key_down(KeyboardKey::KEY_SPACE) {
             self.actions.insert(Action::Command(Command::Projectile));
+        }
+
+        if h.is_key_down(KeyboardKey::KEY_LEFT_SHIFT) {
+            self.actions.insert(Action::Command(Command::Boost));
         }
     }
 
@@ -239,13 +253,14 @@ impl Play {
 
                     // create the players in the cosmos and set the player data
                     for client_id in cids.iter() {
-                        let player_id = self.add_player();
+                        let entity = Entity::Triship(self.forge.triship());
+                        let eid = self.entities.add(entity);
 
-                        self.player_data.player_ids.push(player_id);
-                        self.player_data.map.insert(*client_id, player_id);
+                        self.player_data.entity_ids.push(eid);
+                        self.player_data.map.insert(*client_id, eid);
 
                         if client_id == cid {
-                            self.player_data.player_id = player_id;
+                            self.player_data.player_entity_id = eid;
                         }
                     }
 
@@ -274,7 +289,16 @@ impl Play {
                     // if there are as many entity commands as there are players,
                     // then we have received everything and are ready to progress
                     tick_commands.ready =
-                        tick_commands.commands.len() == self.player_data.player_ids.len();
+                        tick_commands.commands.len() == self.player_data.entity_ids.len();
+                }
+                _ => return,
+            },
+            Message::Logic(LogicMessage::EntityDead(eid, eidx)) => match eidx {
+                EntityIndex::Triship(_) => {
+                    if self.player_data.entity_ids.contains(eid) {
+                        // player has been killed, start a respwan timer
+                        self.player_data.respawn_timers.push((*eid, RESPAWN_TIMER));
+                    }
                 }
                 _ => return,
             },
@@ -292,11 +316,6 @@ impl Play {
         );
     }
 
-    fn add_player(&mut self) -> usize {
-        let entity = Entity::Triship(self.forge.triship());
-        self.entities.add(entity)
-    }
-
     fn action(&mut self, bus: &mut Bus) {
         while let Some(action) = self.actions.pop_last() {
             match action {
@@ -308,5 +327,33 @@ impl Play {
                 }
             }
         }
+    }
+
+    fn update_respawns(&mut self) {
+        self.player_data.respawn_timers.retain_mut(|(eid, timer)| {
+            *timer -= 1;
+
+            if *timer > 0 {
+                return true;
+            }
+
+            let entity = self.forge.triship();
+            let new_eid = self.entities.add(Entity::Triship(entity));
+
+            if self.player_data.player_entity_id == *eid {
+                self.player_data.player_entity_id = new_eid;
+            }
+
+            for (_, entity_id) in self.player_data.map.iter_mut() {
+                if entity_id == eid {
+                    *entity_id = new_eid;
+                }
+            }
+
+            self.player_data.entity_ids.retain(|x| x != eid);
+            self.player_data.entity_ids.push(new_eid);
+
+            false
+        });
     }
 }

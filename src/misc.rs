@@ -4,6 +4,8 @@ use raylib::prelude::*;
 const MAX_SIZE: usize = 4;
 const MAX_DEPTH: u8 = 8;
 
+// TODO: could probably solve this in a better way instead of having boxed stuff
+
 pub struct QuadTree {
     pub root: Node,
     initial: Rectangle,
@@ -80,7 +82,7 @@ fn bounds(eidx: EntityIndex, entities: &Entities) -> Rectangle {
     match eidx {
         EntityIndex::Triship(idx) => &entities.triships[idx].entity.body.polygon,
         EntityIndex::Projectile(idx) => &entities.projectiles[idx].entity.body.polygon,
-        EntityIndex::Exhaust(idx) => &entities.exhausts[idx].entity.body.polygon,
+        _ => panic!("bounds {:?}", eidx),
     }
     .bounds_meld
     .new

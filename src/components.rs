@@ -40,6 +40,18 @@ pub struct Motion {
     pub rotation_speed_max: f32,
 }
 
+pub struct Boost {
+    pub acceleration: f32,
+    pub speed_max: f32,
+    pub acceleration_old: f32,
+    pub speed_max_old: f32,
+    pub lifetime: u8,
+    pub lifetime_max: u8,
+    pub cooldown: u8,
+    pub cooldown_max: u8,
+    pub active: bool,
+}
+
 pub struct Polygon {
     pub dirty: bool,
     pub vertexes: Generation<Vec<Vector2>>,

@@ -49,6 +49,17 @@ impl Forge {
                 rotation_acceleration: 0.02,
                 rotation_speed_max: 0.24,
             },
+            boost: Boost {
+                acceleration: 1.6,
+                acceleration_old: 0.0,
+                speed_max: 40.0,
+                speed_max_old: 0.0,
+                lifetime: 0,
+                lifetime_max: 100,
+                cooldown: 0,
+                cooldown_max: 50,
+                active: false,
+            },
         }
     }
 
@@ -110,6 +121,68 @@ impl Forge {
             },
             owner_id,
         }
+    }
+
+    pub fn explosion(
+        &self,
+        position: Vector2,
+        rotation: Vector2,
+        lifetime: u8,
+        velocity: Vector2,
+        acceleration: f32,
+    ) -> Particle {
+        let s = RotatedShape {
+            shape: position,
+            rotation,
+        };
+        let v = s.shape.vertexes(rotation);
+        let b = v.bounds();
+        let v_gen = Generation {
+            old: v.clone(),
+            new: v,
+        };
+        let b_gen = Generation { old: b, new: b };
+
+        Particle {
+            lifetime,
+            body: Body {
+                state: Generation { old: s, new: s },
+                color: Color::WHITE,
+                polygon: Polygon {
+                    dirty: false,
+                    vertexes: v_gen,
+                    bounds_real: b_gen,
+                    bounds_meld: b_gen,
+                },
+            },
+            motion: Motion {
+                velocity,
+                acceleration,
+                speed_max: 25.0,
+                rotation_speed: 0.0,
+                rotation_acceleration: 0.0,
+                rotation_speed_max: 0.0,
+            },
+        }
+    }
+
+    pub fn explosion_projectile(&self, position: Vector2, h: &mut RaylibHandle) -> Vec<Particle> {
+        let amount = 16;
+        let mut explosion = Vec::new();
+        explosion.reserve_exact(amount);
+
+        for _ in 0..amount {
+            let rotation = Vector2::zero();
+            let lifetime = h.get_random_value::<i32>(5..20) as u8;
+            let x = h.get_random_value::<i32>(-200..200) as f32 / 100.0;
+            let y = h.get_random_value::<i32>(-200..200) as f32 / 100.0;
+            let velocity = Vector2::new(x, y);
+            let acceleration = h.get_random_value::<i32>(1..10) as f32;
+
+            explosion.push(self.explosion(position, rotation, lifetime, velocity, acceleration));
+        }
+
+        explosion
     }
 
     pub fn exhaust(
@@ -176,6 +249,8 @@ impl Forge {
         //       .
 
         let mut exhaust = Vec::new();
+        exhaust.reserve_exact(32);
+
         let v = [2, 4, 6, 8, 6, 4, 2];
         let neg_half = -((v.len() / 2) as f32);
 
@@ -219,6 +294,8 @@ impl Forge {
         h: &mut RaylibHandle,
     ) -> Vec<Particle> {
         let mut exhaust = Vec::new();
+        exhaust.reserve_exact(5);
+
         let v = [1, 3, 1];
         let neg_half = -((v.len() / 2) as f32);
 

@@ -47,7 +47,7 @@ impl System {
 
     pub fn update(&mut self, h: &mut RaylibHandle, bus: &mut Bus) {
         self.action(h, bus);
-        self.client(bus);
+        self.client(h, bus);
         self.server();
     }
 
@@ -73,7 +73,7 @@ impl System {
         }
     }
 
-    fn client(&mut self, bus: &mut Bus) {
+    fn client(&mut self, h: &mut RaylibHandle, bus: &mut Bus) {
         let Some(client) = self.client.as_mut() else {
             return;
         };
@@ -91,6 +91,8 @@ impl System {
                         self.seed = seed;
                         self.client_id = cid;
                         self.client_ids = cids.to_vec();
+
+                        h.set_random_seed(self.seed);
 
                         bus.send(NetMessage::Synchronize(seed, cid, cids));
                     }

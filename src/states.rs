@@ -9,9 +9,9 @@ use crate::{
     messages::{Message, StateMessage, StateRequestMessage},
 };
 
-use self::lobby::Lobby;
-use self::menu::Menu;
-use self::play::Play;
+use lobby::Lobby;
+use menu::Menu;
+use play::Play;
 
 #[derive(Copy, Clone, Debug)]
 pub enum State {

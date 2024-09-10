@@ -17,6 +17,7 @@ pub enum Command {
     RotateLeft,
     RotateRight,
     Projectile,
+    Boost,
 }
 
 const ACCELERATE: u8 = 1;
@@ -24,10 +25,17 @@ const DECELERATE: u8 = 2;
 const ROTATE_LEFT: u8 = 3;
 const ROTATE_RIGHT: u8 = 4;
 const PROJECTILE: u8 = 5;
+const BOOST: u8 = 6;
 
 impl Command {
-    pub fn execute(&self, entities: &mut Entities, id: usize, forge: &Forge, h: &mut RaylibHandle) {
-        let Some(eidx) = entities.entity(id) else {
+    pub fn execute(
+        &self,
+        entities: &mut Entities,
+        eid: usize,
+        forge: &Forge,
+        h: &mut RaylibHandle,
+    ) {
+        let Some(eidx) = entities.entity(eid) else {
             return;
         };
 
@@ -36,7 +44,8 @@ impl Command {
             Command::Decelerate => handle_decelerate(entities, eidx, forge, h),
             Command::RotateLeft => handle_rotate_left(entities, eidx, forge, h),
             Command::RotateRight => handle_rotate_right(entities, eidx, forge, h),
-            Command::Projectile => handle_projectile(entities, eidx, id, forge),
+            Command::Projectile => handle_projectile(entities, eidx, eid, forge),
+            Command::Boost => handle_boost(entities, eidx, eid, forge),
         }
     }
 
@@ -51,6 +60,7 @@ impl Command {
             ROTATE_LEFT => Command::RotateLeft,
             ROTATE_RIGHT => Command::RotateRight,
             PROJECTILE => Command::Projectile,
+            BOOST => Command::Boost,
             _ => panic!("wtf ctype {}", ctype),
         }
     }
@@ -71,6 +81,7 @@ impl Command {
             Command::RotateLeft => bytes.push(ROTATE_LEFT),
             Command::RotateRight => bytes.push(ROTATE_RIGHT),
             Command::Projectile => bytes.push(PROJECTILE),
+            Command::Boost => bytes.push(BOOST),
         }
 
         bytes.into_boxed_slice()
@@ -233,4 +244,27 @@ fn handle_projectile(entities: &mut Entities, eidx: EntityIndex, id: usize, forg
     let projectile = forge.projectile(position, rotation, velocity, id);
 
     entities.add(Entity::Projectile(projectile));
+}
+
+fn handle_boost(entities: &mut Entities, eidx: EntityIndex, _id: usize, _forge: &Forge) {
+    let (motion, boost) = match eidx {
+        EntityIndex::Triship(idx) => {
+            let e = &mut entities.triships[idx].entity;
+            (&mut e.motion, &mut e.boost)
+        }
+        _ => return,
+    };
+
+    if boost.active {
+        return;
+    }
+
+    boost.active = true;
+    boost.lifetime = boost.lifetime_max;
+    boost.cooldown = boost.cooldown_max;
+    boost.speed_max_old = motion.speed_max;
+    boost.acceleration_old = motion.acceleration;
+
+    motion.speed_max = boost.speed_max;
+    motion.acceleration = boost.acceleration;
 }

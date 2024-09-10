@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use raylib::prelude::*;
 
 use crate::{
@@ -20,6 +22,8 @@ impl Renderer {
         viewport: Rectangle,
         delta: f32,
     ) {
+        // TODO: clean this shit up ffs :D
+
         for triship in &entities.triships {
             let bounds = triship.entity.body.polygon.bounds_real.lerp(delta);
 
@@ -71,6 +75,16 @@ impl Renderer {
                 Color::WHITE,
             );
 
+            let life = triship.entity.life;
+            r.draw_text_ex(
+                r.get_font_default(),
+                &format!("{}", life),
+                ent.v2.add(Vector2::new(0.0, -10.0)),
+                10.0,
+                1.0,
+                Color::WHITE,
+            );
+
             r.draw_rectangle_lines_ex(bounds, 1.0, Color::BLUE);
 
             let bounds = &triship.entity.body.polygon.bounds_meld.lerp(delta);
@@ -88,6 +102,19 @@ impl Renderer {
             let ent = gen.lerp(delta);
 
             r.draw_pixel_v(ent, exhaust.entity.body.color);
+        }
+
+        for explosion in &entities.explosions {
+            let bounds = explosion.entity.body.polygon.bounds_real.lerp(delta);
+
+            if bounds.cull(viewport) {
+                continue;
+            }
+
+            let gen = &explosion.entity.body.state;
+            let ent = gen.lerp(delta);
+
+            r.draw_pixel_v(ent, explosion.entity.body.color);
         }
 
         for projectile in &entities.projectiles {
