@@ -215,7 +215,7 @@ impl Play {
                 height: self.camera.offset.y * 2.0 - 200.0,
             };
 
-            self.logic.draw(&mut r);
+            // self.logic.draw(&mut r);
             self.renderer.draw(&mut r, &self.entities, viewport, delta);
         }
 

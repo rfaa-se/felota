@@ -18,7 +18,7 @@ pub struct Node {
 }
 
 pub enum NodeType {
-    Leaf(Vec<(EntityIndex, usize)>),
+    Leaf(Vec<EntityIndex>),
     Branch([Box<Node>; 4]),
 }
 
@@ -57,7 +57,7 @@ impl QuadTree {
 
         let bounds = bounds(eidx, entities);
 
-        self.root.add(eid, eidx, bounds, entities);
+        self.root.add(eidx, bounds, entities);
     }
 
     pub fn draw(&self, r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>) {
@@ -89,7 +89,7 @@ fn bounds(eidx: EntityIndex, entities: &Entities) -> Rectangle {
 }
 
 impl Node {
-    fn add(&mut self, eid: usize, eidx: EntityIndex, bounds: Rectangle, entities: &Entities) {
+    fn add(&mut self, eidx: EntityIndex, bounds: Rectangle, entities: &Entities) {
         match &mut self.node_type {
             NodeType::Leaf(ents) => {
                 if !self.dimension.check_collision_recs(&bounds) {
@@ -98,16 +98,16 @@ impl Node {
 
                 if self.depth != MAX_DEPTH && ents.len() == MAX_SIZE {
                     self.divide(entities);
-                    self.add(eid, eidx, bounds, entities);
+                    self.add(eidx, bounds, entities);
 
                     return;
                 }
 
-                ents.push((eidx, eid));
+                ents.push(eidx);
             }
             NodeType::Branch(nodes) => {
                 for node in nodes {
-                    node.add(eid, eidx, bounds, entities);
+                    node.add(eidx, bounds, entities);
                 }
             }
         };
@@ -167,11 +167,11 @@ impl Node {
             }),
         ];
 
-        for (eidx, eid) in ents {
+        for eidx in ents {
             let bounds = bounds(*eidx, entities);
 
             for node in nodes.iter_mut() {
-                node.add(*eid, *eidx, bounds, entities);
+                node.add(*eidx, bounds, entities);
             }
         }
 

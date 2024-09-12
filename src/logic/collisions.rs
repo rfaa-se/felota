@@ -1,20 +1,117 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, ops::Add};
 
 use raylib::prelude::*;
 
 use crate::{
-    components::{Boundable, Generation, Shape},
+    components::{Boundable, Centroidable, Generation, Shape},
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
     misc::{Node, NodeType, QuadTree},
 };
 
-pub fn update_collision_detection(
+pub fn update_collision_reaction(
     entities: &mut Entities,
-    quadtree: &mut QuadTree,
+    collisions: &mut Vec<(EntityIndex, EntityIndex)>,
     dead: &mut BTreeSet<usize>,
     forge: &Forge,
     h: &mut RaylibHandle,
+) {
+    while let Some((eidx1, eidx2)) = collisions.pop() {
+        match (eidx1, eidx2) {
+            (EntityIndex::Triship(idx1), EntityIndex::Triship(idx2)) => {
+                handle_triship_triship(idx1, idx2, entities, forge, h)
+            }
+            (EntityIndex::Triship(idx_t), EntityIndex::Projectile(idx_p))
+            | (EntityIndex::Projectile(idx_p), EntityIndex::Triship(idx_t)) => {
+                handle_triship_projectile(idx_t, idx_p, entities, dead, forge, h)
+            }
+            (EntityIndex::Projectile(idx1), EntityIndex::Projectile(idx2)) => {
+                handle_projectile_projectile(idx1, idx2, entities, dead, forge, h)
+            }
+            _ => (),
+        }
+    }
+
+    fn handle_triship_projectile(
+        idx_t: usize,
+        idx_p: usize,
+        entities: &mut Entities,
+        dead: &mut BTreeSet<usize>,
+        forge: &Forge,
+        h: &mut RaylibHandle,
+    ) {
+        let t = &mut entities.triships[idx_t];
+        let p = &entities.projectiles[idx_p];
+
+        t.entity.life -= p.entity.damage;
+
+        dead.insert(p.id);
+
+        // spawn explosion!
+        for explosion in forge.explosion_projectile(p.entity.body.polygon.vertexes.new[1], h) {
+            entities.add(Entity::Explosion(explosion));
+        }
+
+        let t = &entities.triships[idx_t];
+        if t.entity.life <= 0.0 {
+            let c = t.entity.body.state.new.shape.centroid();
+            let d1 = t.entity.body.polygon.vertexes.new[0] - c;
+            let d2 = t.entity.body.polygon.vertexes.new[1] - c;
+            let d3 = t.entity.body.polygon.vertexes.new[2] - c;
+
+            for explosion in forge.explosion_triship(c, h) {
+                entities.add(Entity::Explosion(explosion));
+            }
+
+            for explosion in forge.explosion_projectile(c.add(d1 / 3.0), h) {
+                entities.add(Entity::Explosion(explosion));
+            }
+
+            for explosion in forge.explosion_projectile(c.add(d2 / 3.0), h) {
+                entities.add(Entity::Explosion(explosion));
+            }
+
+            for explosion in forge.explosion_projectile(c.add(d3 / 3.0), h) {
+                entities.add(Entity::Explosion(explosion));
+            }
+        }
+    }
+
+    fn handle_triship_triship(
+        _idx1: usize,
+        _idx2: usize,
+        _entities: &mut Entities,
+        _forge: &Forge,
+        _h: &mut RaylibHandle,
+    ) {
+        // TODO: boom?
+    }
+
+    fn handle_projectile_projectile(
+        idx1: usize,
+        idx2: usize,
+        entities: &mut Entities,
+        dead: &mut BTreeSet<usize>,
+        forge: &Forge,
+        h: &mut RaylibHandle,
+    ) {
+        let p1 = &entities.projectiles[idx1];
+        let p2 = &entities.projectiles[idx2];
+
+        dead.insert(p1.id);
+        dead.insert(p2.id);
+
+        // spawn explosion!
+        for explosion in forge.explosion_projectile(p1.entity.body.polygon.vertexes.new[1], h) {
+            entities.add(Entity::Explosion(explosion));
+        }
+    }
+}
+
+pub fn update_collision_detection(
+    entities: &mut Entities,
+    quadtree: &mut QuadTree,
+    collisions: &mut Vec<(EntityIndex, EntityIndex)>,
 ) {
     quadtree.reset();
 
@@ -27,35 +124,20 @@ pub fn update_collision_detection(
             quadtree.add(eid, &entities);
         });
 
-    run(&quadtree.root, entities, dead, forge, h);
+    run(&quadtree.root, entities, collisions);
 
-    fn run(
-        node: &Node,
-        entities: &mut Entities,
-        dead: &mut BTreeSet<usize>,
-        forge: &Forge,
-        h: &mut RaylibHandle,
-    ) {
+    fn run(node: &Node, entities: &mut Entities, collisions: &mut Vec<(EntityIndex, EntityIndex)>) {
         match &node.node_type {
             NodeType::Leaf(ents) => {
                 for i in 0..ents.len() {
-                    let (eidx1, eid1) = ents[i];
+                    let eidx1 = ents[i];
                     let bounds1 = bounds(eidx1, entities);
 
                     for j in i + 1..ents.len() {
-                        let (eidx2, eid2) = ents[j];
+                        let eidx2 = ents[j];
 
                         match (eidx1, eidx2) {
-                            // let's not shoot ourselves
-                            // TODO: maybe this should be possible?
-                            (EntityIndex::Triship(idx1), EntityIndex::Projectile(idx2))
-                            | (EntityIndex::Projectile(idx2), EntityIndex::Triship(idx1))
-                                if entities.projectiles[idx2].entity.owner_id
-                                    == entities.triships[idx1].id =>
-                            {
-                                continue;
-                            }
-                            // let's not shoot projectiles with projectiles
+                            // let's not shoot projectiles with projectiles for now, it's extremely cpu intensive...
                             (EntityIndex::Projectile(_), EntityIndex::Projectile(_)) => {
                                 continue;
                             }
@@ -99,6 +181,9 @@ pub fn update_collision_detection(
 
                         let mut speed_cur1 = 0.0;
                         let mut speed_cur2 = 0.0;
+
+                        // TODO: check if objects are moving away from each other,
+                        // if so, can we guarantee that there won't be a collision and early exit..?
 
                         loop {
                             speed_cur1 += speed_incr1;
@@ -152,62 +237,37 @@ pub fn update_collision_detection(
 
                             match (eidx1, eidx2) {
                                 (EntityIndex::Triship(_), EntityIndex::Triship(_)) => {
-                                    // TODO: boom?
+                                    break;
+
+                                    // reposition(
+                                    //     eidx1,
+                                    //     dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
+                                    //     entities,
+                                    // );
+                                    // reposition(
+                                    //     eidx2,
+                                    //     dir2 * -1.0 * speed_max2 + dir2 * speed_cur2,
+                                    //     entities,
+                                    // );
                                 }
-                                (EntityIndex::Triship(idx_t), EntityIndex::Projectile(idx_p)) => {
-                                    handle_repositioning(
+                                (EntityIndex::Triship(_), EntityIndex::Projectile(_)) => {
+                                    reposition(
                                         eidx2,
                                         dir2 * -1.0 * speed_max2 + dir2 * speed_cur2,
                                         entities,
                                     );
-
-                                    dead.insert(eid2);
-
-                                    handle_triship_projectile(idx_t, idx_p, entities, forge, h);
                                 }
-                                (EntityIndex::Projectile(idx_p), EntityIndex::Triship(idx_t)) => {
-                                    handle_repositioning(
+                                (EntityIndex::Projectile(_), EntityIndex::Triship(_)) => {
+                                    reposition(
                                         eidx1,
                                         dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
                                         entities,
                                     );
-
-                                    dead.insert(eid1);
-
-                                    handle_triship_projectile(idx_t, idx_p, entities, forge, h);
                                 }
                                 _ => (),
                             }
 
-                            fn handle_repositioning(
-                                eidx: EntityIndex,
-                                vel: Vector2,
-                                entities: &mut Entities,
-                            ) {
-                                let s = shape(eidx, entities);
-                                s.accelerate(vel);
-                                s.renew();
-                            }
-
-                            fn handle_triship_projectile(
-                                idx_t: usize,
-                                idx_p: usize,
-                                entities: &mut Entities,
-                                forge: &Forge,
-                                h: &mut RaylibHandle,
-                            ) {
-                                let t = &mut entities.triships[idx_t].entity;
-                                let p = &entities.projectiles[idx_p].entity;
-
-                                t.life -= p.damage;
-
-                                // spawn some explosions!
-                                for explosion in
-                                    forge.explosion_projectile(p.body.polygon.vertexes.new[1], h)
-                                {
-                                    entities.add(Entity::Explosion(explosion));
-                                }
-                            }
+                            collisions.push((eidx1, eidx2));
 
                             break;
                         }
@@ -216,10 +276,16 @@ pub fn update_collision_detection(
             }
             NodeType::Branch(nodes) => {
                 for node in nodes {
-                    run(&node, entities, dead, forge, h);
+                    run(&node, entities, collisions);
                 }
             }
         }
+    }
+
+    fn reposition(eidx: EntityIndex, vel: Vector2, entities: &mut Entities) {
+        let s = shape(eidx, entities);
+        s.accelerate(vel);
+        s.renew();
     }
 
     fn vertexes(eidx: EntityIndex, entities: &Entities) -> &Generation<Vec<Vector2>> {

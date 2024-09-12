@@ -1,4 +1,4 @@
-mod collision_detection;
+mod collisions;
 
 use std::collections::BTreeSet;
 
@@ -7,7 +7,7 @@ use crate::{
     commands::EntityCommands,
     components::{Generationable, Motion, Shape},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH},
-    entities::Entities,
+    entities::{Entities, EntityIndex},
     forge::Forge,
     messages::LogicMessage,
     misc::QuadTree,
@@ -15,13 +15,14 @@ use crate::{
 
 use raylib::prelude::*;
 
-use collision_detection::*;
+use collisions::*;
 
 const COSMIC_DRAG: Vector2 = Vector2::new(0.1, 0.1);
 const COSMIC_DRAG_ROTATION: f32 = 0.003;
 
 pub struct Logic {
     dead: BTreeSet<usize>,
+    collisions: Vec<(EntityIndex, EntityIndex)>,
     quadtree: QuadTree,
 }
 
@@ -29,6 +30,7 @@ impl Logic {
     pub fn new() -> Self {
         Self {
             dead: BTreeSet::new(),
+            collisions: Vec::new(),
             quadtree: QuadTree::new(COSMOS_WIDTH, COSMOS_HEIGHT),
         }
     }
@@ -41,17 +43,18 @@ impl Logic {
         forge: &Forge,
         h: &mut RaylibHandle,
     ) {
-        update_dead(entities, &mut self.dead);
+        update_dead_removal(entities, &mut self.dead);
         update_body_generation(entities);
         update_commands(entities, entity_cmds, forge, h);
         update_boost(entities);
         update_motion(entities);
         update_body(entities);
-        update_collision_detection(entities, &mut self.quadtree, &mut self.dead, forge, h);
-        update_particles(entities, &mut self.dead);
+        update_collision_detection(entities, &mut self.quadtree, &mut self.collisions);
+        update_collision_reaction(entities, &mut self.collisions, &mut self.dead, forge, h);
+        update_particles_lifetime(entities, &mut self.dead);
         update_particles_explosions(entities);
         update_out_of_bounds(entities, &mut self.dead);
-        update_life_dead(entities, &mut self.dead);
+        update_dead_detection(entities, &mut self.dead);
         update_dead_notify(entities, &self.dead, bus);
     }
 
@@ -60,11 +63,33 @@ impl Logic {
     }
 }
 
-fn update_particles_explosions(_entities: &mut Entities) {
-    // TODO: update the color based on lifetime
-}
-
 // TODO: move these functions into their own files? need to figure out structure
+
+fn update_particles_explosions(entities: &mut Entities) {
+    entities.explosions.iter_mut().for_each(|x| {
+        let c = &mut x.entity.body.color;
+
+        // if c.r > l3 {
+        //     c.r -= l3;
+        // }
+
+        if c.g < u8::MAX - c.b {
+            c.g += c.b;
+        } else {
+            c.g = u8::MAX;
+        }
+
+        // if c.b < u8::MAX - l2 {
+        //     c.b += l2;
+        // }
+
+        if c.a > c.b {
+            c.a -= c.b;
+        } else {
+            c.a = 0;
+        }
+    });
+}
 
 fn update_dead_notify(entities: &mut Entities, dead: &BTreeSet<usize>, bus: &mut Bus) {
     for eid in dead {
@@ -74,7 +99,7 @@ fn update_dead_notify(entities: &mut Entities, dead: &BTreeSet<usize>, bus: &mut
     }
 }
 
-fn update_life_dead(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
+fn update_dead_detection(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
     entities
         .triships
         .iter_mut()
@@ -117,7 +142,7 @@ fn update_boost(entities: &mut Entities) {
         });
 }
 
-fn update_particles(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
+fn update_particles_lifetime(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
     entities
         .exhausts
         .iter_mut()
@@ -131,7 +156,7 @@ fn update_particles(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
         })
 }
 
-fn update_dead(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
+fn update_dead_removal(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
     while let Some(d) = dead.pop_first() {
         entities.kill(d);
     }
@@ -197,7 +222,7 @@ fn update_motion(entities: &mut Entities) {
             entities
                 .explosions
                 .iter_mut()
-                .map(|x| (&mut x.entity.motion, true)),
+                .map(|x| (&mut x.entity.motion, false)),
         )
         .for_each(|(motion, apply_drag)| {
             if apply_drag {
@@ -288,7 +313,7 @@ fn update_body(entities: &mut Entities) {
 fn update_out_of_bounds(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
     entities
         .projectiles
-        .iter_mut()
+        .iter()
         .map(|x| (x.id, x.entity.body.polygon.bounds_real.new))
         .for_each(|(id, bounds)| {
             if bounds.x + bounds.width < 0.0

@@ -30,7 +30,7 @@ impl Forge {
         let b_gen = Generation { old: b, new: b };
 
         Triship {
-            life: 10.0,
+            life: 100.0,
             body: Body {
                 state: Generation { old: s, new: s },
                 color: Color::RED,
@@ -130,6 +130,7 @@ impl Forge {
         lifetime: u8,
         velocity: Vector2,
         acceleration: f32,
+        color: Color,
     ) -> Particle {
         let s = RotatedShape {
             shape: position,
@@ -147,7 +148,7 @@ impl Forge {
             lifetime,
             body: Body {
                 state: Generation { old: s, new: s },
-                color: Color::WHITE,
+                color,
                 polygon: Polygon {
                     dirty: false,
                     vertexes: v_gen,
@@ -178,8 +179,53 @@ impl Forge {
             let y = h.get_random_value::<i32>(-200..200) as f32 / 100.0;
             let velocity = Vector2::new(x, y);
             let acceleration = h.get_random_value::<i32>(1..10) as f32;
+            let color = Color::new(
+                h.get_random_value::<i32>(200..255) as u8,
+                h.get_random_value::<i32>(0..10) as u8,
+                h.get_random_value::<i32>(0..10) as u8,
+                h.get_random_value::<i32>(200..255) as u8,
+            );
 
-            explosion.push(self.explosion(position, rotation, lifetime, velocity, acceleration));
+            explosion.push(self.explosion(
+                position,
+                rotation,
+                lifetime,
+                velocity,
+                acceleration,
+                color,
+            ));
+        }
+
+        explosion
+    }
+
+    pub fn explosion_triship(&self, position: Vector2, h: &mut RaylibHandle) -> Vec<Particle> {
+        let amount = 64;
+        let mut explosion = Vec::new();
+        explosion.reserve_exact(amount);
+
+        for _ in 0..amount {
+            let rotation = Vector2::zero();
+            let lifetime = h.get_random_value::<i32>(10..30) as u8;
+            let x = h.get_random_value::<i32>(-3000..3000) as f32 / 1000.0;
+            let y = h.get_random_value::<i32>(-3000..3000) as f32 / 1000.0;
+            let velocity = Vector2::new(x, y);
+            let acceleration = h.get_random_value::<i32>(1..2000) as f32 / 100.0;
+            let color = Color::new(
+                h.get_random_value::<i32>(200..255) as u8,
+                h.get_random_value::<i32>(0..10) as u8,
+                h.get_random_value::<i32>(0..10) as u8,
+                h.get_random_value::<i32>(200..255) as u8,
+            );
+
+            explosion.push(self.explosion(
+                position,
+                rotation,
+                lifetime,
+                velocity,
+                acceleration,
+                color,
+            ));
         }
 
         explosion
