@@ -13,13 +13,16 @@ use crate::{
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
     logic::Logic,
-    messages::{EngineRequestMessage, LogicMessage, Message, NetMessage, NetRequestMessage},
+    messages::{
+        EngineMessage, EngineRequestMessage, LogicMessage, Message, NetMessage, NetRequestMessage,
+    },
     render::Renderer,
 };
 
 pub struct Play {
     tick: u32,
     synchronized: bool,
+    debug: bool,
     stalling: bool,
     network_data: NetworkData,
     player_data: PlayerData,
@@ -56,6 +59,7 @@ struct PlayerData {
 enum Action {
     Command(Command),
     ToggleInterpolation,
+    ToggleDebug,
 }
 
 impl Play {
@@ -63,6 +67,7 @@ impl Play {
         Self {
             tick: 0,
             synchronized: false,
+            debug: false,
             stalling: false,
             network_data: NetworkData {
                 client_id: 0,
@@ -99,6 +104,9 @@ impl Play {
     }
 
     pub fn init(&mut self, bus: &mut Bus) {
+        // we must synchronize to get current options
+        bus.send(EngineRequestMessage::Synchronize);
+
         // we must synchronize to get all clients, local client, and rng seed
         bus.send(NetRequestMessage::Synchronize);
     }
@@ -168,6 +176,10 @@ impl Play {
             self.actions.insert(Action::ToggleInterpolation);
         }
 
+        if h.is_key_pressed(KeyboardKey::KEY_F2) {
+            self.actions.insert(Action::ToggleDebug);
+        }
+
         // gameplay
         if h.is_key_down(KeyboardKey::KEY_LEFT) {
             self.actions.insert(Action::Command(Command::RotateLeft));
@@ -215,8 +227,12 @@ impl Play {
                 height: self.camera.offset.y * 2.0 - 200.0,
             };
 
-            // self.logic.draw(&mut r);
-            self.renderer.draw(&mut r, &self.entities, viewport, delta);
+            if self.debug {
+                self.logic.draw(&mut r);
+            }
+
+            self.renderer
+                .draw(&mut r, &self.entities, viewport, self.debug, delta);
         }
 
         if self.stalling {
@@ -302,6 +318,11 @@ impl Play {
                 }
                 _ => return,
             },
+            Message::Engine(
+                EngineMessage::Synchronize(debug) | EngineMessage::ToggleDebug(debug),
+            ) => {
+                self.debug = *debug;
+            }
             _ => return,
         }
     }
@@ -324,6 +345,9 @@ impl Play {
                 }
                 Action::ToggleInterpolation => {
                     bus.send(EngineRequestMessage::ToggleInterpolation);
+                }
+                Action::ToggleDebug => {
+                    bus.send(EngineRequestMessage::ToggleDebug);
                 }
             }
         }

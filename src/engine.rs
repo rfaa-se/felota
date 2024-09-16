@@ -22,12 +22,15 @@ pub struct System {
     tps_current: u32,
     tps_counter: u32,
     interpolate: bool,
+    debug: bool,
     actions: BTreeSet<Action>,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum Action {
     ToggleInterpolation,
+    ToggleDebug,
+    Synchronize,
 }
 
 impl Engine {
@@ -151,6 +154,7 @@ impl System {
             tps_current: 0,
             tps_counter: 0,
             interpolate: true,
+            debug: true,
             actions: BTreeSet::new(),
         }
     }
@@ -171,6 +175,12 @@ impl System {
                     EngineRequestMessage::ToggleInterpolation => {
                         self.actions.insert(Action::ToggleInterpolation);
                     }
+                    EngineRequestMessage::ToggleDebug => {
+                        self.actions.insert(Action::ToggleDebug);
+                    }
+                    EngineRequestMessage::Synchronize => {
+                        self.actions.insert(Action::Synchronize);
+                    }
                 },
                 _ => return,
             },
@@ -184,6 +194,13 @@ impl System {
                 Action::ToggleInterpolation => {
                     self.interpolate = !self.interpolate;
                     bus.send(EngineMessage::ToggleInterpolation(self.interpolate));
+                }
+                Action::ToggleDebug => {
+                    self.debug = !self.debug;
+                    bus.send(EngineMessage::ToggleDebug(self.debug));
+                }
+                Action::Synchronize => {
+                    bus.send(EngineMessage::Synchronize(self.debug));
                 }
             }
         }

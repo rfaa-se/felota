@@ -18,11 +18,15 @@ pub enum EngineMessage {
     Request(EngineRequestMessage),
     #[allow(dead_code)]
     ToggleInterpolation(bool),
+    ToggleDebug(bool),
+    Synchronize(bool),
 }
 
 #[derive(Debug)]
 pub enum EngineRequestMessage {
     ToggleInterpolation,
+    ToggleDebug,
+    Synchronize,
 }
 
 #[derive(Debug)]

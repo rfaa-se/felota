@@ -10,4 +10,4 @@ pub const TICK_SCHEDULED: u32 = 4;
 pub const HUD_BACKGROUND_COLOR: Color = Color::DARKGRAY;
 pub const HUD_HEIGHT: i32 = 60;
 pub const DEBUG_COLOR: Color = Color::WHITESMOKE;
-pub const RESPAWN_TIMER: u8 = 100;
+pub const RESPAWN_TIMER: u8 = 50;

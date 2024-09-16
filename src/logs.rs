@@ -5,12 +5,13 @@ use raylib::prelude::*;
 use crate::{
     bus::Bus,
     constants::{DEBUG_COLOR, RENDER_HEIGHT},
-    messages::{Message, NetMessage, NetRequestMessage},
+    messages::{EngineMessage, Message, NetMessage, NetRequestMessage},
 };
 
 pub struct System {
     logs: VecDeque<String>,
     command_logs: VecDeque<String>,
+    debug: bool,
 }
 
 impl System {
@@ -18,12 +19,17 @@ impl System {
         Self {
             logs: VecDeque::new(),
             command_logs: VecDeque::new(),
+            debug: false,
         }
     }
 
     pub fn update(&mut self, _h: &mut RaylibHandle, _bus: &mut Bus) {}
 
     pub fn draw(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, _delta: f32) {
+        if !self.debug {
+            return;
+        }
+
         self.logs.iter().fold(
             RENDER_HEIGHT as i32 - self.logs.len() as i32 * 10 - 62,
             |y, log| {
@@ -62,6 +68,15 @@ impl System {
                 self.logs
                     .push_back(format!("{:?}", msg).replace("(", "->").replace(")", ""));
             }
+        }
+
+        match msg {
+            Message::Engine(
+                EngineMessage::Synchronize(debug) | EngineMessage::ToggleDebug(debug),
+            ) => {
+                self.debug = *debug;
+            }
+            _ => (),
         }
     }
 }

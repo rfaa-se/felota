@@ -69,19 +69,11 @@ fn update_particles_explosions(entities: &mut Entities) {
     entities.explosions.iter_mut().for_each(|x| {
         let c = &mut x.entity.body.color;
 
-        // if c.r > l3 {
-        //     c.r -= l3;
-        // }
-
         if c.g < u8::MAX - c.b {
             c.g += c.b;
         } else {
             c.g = u8::MAX;
         }
-
-        // if c.b < u8::MAX - l2 {
-        //     c.b += l2;
-        // }
 
         if c.a > c.b {
             c.a -= c.b;

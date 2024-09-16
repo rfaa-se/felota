@@ -20,6 +20,7 @@ impl Renderer {
         r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
         entities: &Entities,
         viewport: Rectangle,
+        debug: bool,
         delta: f32,
     ) {
         // TODO: clean this shit up ffs :D
@@ -44,6 +45,10 @@ impl Renderer {
             };
 
             r.draw_triangle_lines(ent.v1, ent.v2, ent.v3, triship.entity.body.color);
+
+            if !debug {
+                continue;
+            }
 
             let deg = gen.new.rotation.y.atan2(gen.new.rotation.x).to_degrees();
             r.draw_text_ex(
