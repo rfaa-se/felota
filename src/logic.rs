@@ -53,6 +53,7 @@ impl Logic {
         update_collision_reaction(entities, &mut self.collisions, &mut self.dead, forge, h);
         update_particles_lifetime(entities, &mut self.dead);
         update_particles_explosions(entities);
+        update_particles_stars(entities);
         update_out_of_bounds(entities, &mut self.dead);
         update_dead_detection(entities, &mut self.dead);
         update_dead_notify(entities, &self.dead, bus);
@@ -65,18 +66,53 @@ impl Logic {
 
 // TODO: move these functions into their own files? need to figure out structure
 
+fn update_particles_stars(entities: &mut Entities) {
+    entities.stars.iter_mut().for_each(|x| {
+        // 0b_0000_0000
+        //            x: add, bool
+        //         xxx : amount, 0-7
+
+        let c = &mut x.entity.body.color;
+        let r = &mut x.entity.random;
+        let add = *r << 7 >> 7 > 0;
+        let amount = *r << 4 >> 5;
+
+        if amount == 0 {
+            return;
+        }
+
+        // twinkle twinkle little star
+        if add {
+            if c.a >= u8::MAX - amount {
+                // if we cannot add anymore, time to toggle
+                *r -= 1;
+            } else {
+                c.a += amount;
+            }
+        } else {
+            if c.a <= amount {
+                // if we cannot subtract anymore, time to toggle
+                *r += 1;
+            } else {
+                c.a -= amount;
+            }
+        }
+    });
+}
+
 fn update_particles_explosions(entities: &mut Entities) {
     entities.explosions.iter_mut().for_each(|x| {
+        let r = x.entity.random;
         let c = &mut x.entity.body.color;
 
-        if c.g < u8::MAX - c.b {
-            c.g += c.b;
+        if c.g < u8::MAX - r {
+            c.g += r;
         } else {
             c.g = u8::MAX;
         }
 
-        if c.a > c.b {
-            c.a -= c.b;
+        if c.a > r {
+            c.a -= r;
         } else {
             c.a = 0;
         }

@@ -1,6 +1,10 @@
 use std::ops::Add;
 
-use crate::{components::*, entities::*};
+use crate::{
+    components::*,
+    constants::{STARFIELD_HEIGHT, STARFIELD_WIDTH},
+    entities::*,
+};
 
 use raylib::prelude::*;
 
@@ -131,6 +135,7 @@ impl Forge {
         velocity: Vector2,
         acceleration: f32,
         color: Color,
+        random: u8,
     ) -> Particle {
         let s = RotatedShape {
             shape: position,
@@ -146,6 +151,7 @@ impl Forge {
 
         Particle {
             lifetime,
+            random,
             body: Body {
                 state: Generation { old: s, new: s },
                 color,
@@ -185,6 +191,7 @@ impl Forge {
                 h.get_random_value::<i32>(0..10) as u8,
                 h.get_random_value::<i32>(200..255) as u8,
             );
+            let random = h.get_random_value::<i32>(1..15) as u8;
 
             explosion.push(self.explosion(
                 position,
@@ -193,6 +200,7 @@ impl Forge {
                 velocity,
                 acceleration,
                 color,
+                random,
             ));
         }
 
@@ -217,6 +225,7 @@ impl Forge {
                 h.get_random_value::<i32>(0..10) as u8,
                 h.get_random_value::<i32>(200..255) as u8,
             );
+            let random = h.get_random_value::<i32>(1..15) as u8;
 
             explosion.push(self.explosion(
                 position,
@@ -225,6 +234,7 @@ impl Forge {
                 velocity,
                 acceleration,
                 color,
+                random,
             ));
         }
 
@@ -253,6 +263,7 @@ impl Forge {
 
         Particle {
             lifetime,
+            random: 0,
             body: Body {
                 state: Generation { old: s, new: s },
                 color: Color::LIGHTSKYBLUE,
@@ -401,5 +412,88 @@ impl Forge {
         ));
 
         exhaust
+    }
+
+    pub fn star(
+        &self,
+        position: Vector2,
+        rotation: Vector2,
+        lifetime: u8,
+        random: u8,
+        velocity: Vector2,
+        acceleration: f32,
+        color: Color,
+    ) -> Particle {
+        let s = RotatedShape {
+            shape: position,
+            rotation,
+        };
+        let v = s.shape.vertexes(rotation);
+        let b = v.bounds();
+        let v_gen = Generation {
+            old: v.clone(),
+            new: v,
+        };
+        let b_gen = Generation { old: b, new: b };
+
+        Particle {
+            lifetime,
+            random,
+            body: Body {
+                state: Generation { old: s, new: s },
+                color,
+                polygon: Polygon {
+                    dirty: false,
+                    vertexes: v_gen,
+                    bounds_real: b_gen,
+                    bounds_meld: b_gen,
+                },
+            },
+            motion: Motion {
+                velocity,
+                acceleration,
+                speed_max: 5.0,
+                rotation_speed: 0.0,
+                rotation_acceleration: 0.0,
+                rotation_speed_max: 0.0,
+            },
+        }
+    }
+
+    pub fn stars(&self, h: &mut RaylibHandle) -> Vec<Particle> {
+        let amount = 128;
+        let mut stars = Vec::new();
+        stars.reserve_exact(amount);
+
+        for _ in 0..amount {
+            let rotation = Vector2::zero();
+            let position = Vector2::new(
+                h.get_random_value::<i32>(1..STARFIELD_WIDTH - 1) as f32,
+                h.get_random_value::<i32>(1..STARFIELD_HEIGHT - 1) as f32,
+            );
+            let lifetime = 0;
+            let velocity = Vector2::zero();
+            let acceleration = 0.0;
+            let color = Color::new(
+                h.get_random_value::<i32>(100..255) as u8,
+                h.get_random_value::<i32>(200..255) as u8,
+                h.get_random_value::<i32>(200..255) as u8,
+                h.get_random_value::<i32>(0..255) as u8,
+            );
+            let random =
+                ((h.get_random_value::<i32>(0..7) << 1) + h.get_random_value::<i32>(0..1)) as u8;
+
+            stars.push(self.star(
+                position,
+                rotation,
+                lifetime,
+                random,
+                velocity,
+                acceleration,
+                color,
+            ));
+        }
+
+        stars
     }
 }

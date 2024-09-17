@@ -10,6 +10,7 @@ pub enum EntityIndex {
     Projectile(usize),
     Exhaust(usize),
     Explosion(usize),
+    Star(usize),
 }
 
 pub enum Entity {
@@ -17,6 +18,7 @@ pub enum Entity {
     Projectile(Projectile),
     Exhaust(Particle),
     Explosion(Particle),
+    Star(Particle),
 }
 
 pub struct EntityId<T> {
@@ -29,6 +31,7 @@ pub struct Entities {
     pub projectiles: Vec<EntityId<Projectile>>,
     pub exhausts: Vec<EntityId<Particle>>,
     pub explosions: Vec<EntityId<Particle>>,
+    pub stars: Vec<EntityId<Particle>>,
 
     id_map: HashMap<usize, EntityIndex>,
     id_free: usize,
@@ -49,6 +52,7 @@ pub struct Projectile {
 }
 
 pub struct Particle {
+    pub random: u8,
     pub lifetime: u8,
     pub body: Body<Vector2>,
     pub motion: Motion,
@@ -61,6 +65,7 @@ impl Entities {
             projectiles: Vec::new(),
             exhausts: Vec::new(),
             explosions: Vec::new(),
+            stars: Vec::new(),
 
             id_map: HashMap::new(),
             id_free: 0,
@@ -68,7 +73,11 @@ impl Entities {
     }
 
     pub fn total(&self) -> usize {
-        self.triships.len() + self.projectiles.len() + self.exhausts.len()
+        self.triships.len()
+            + self.projectiles.len()
+            + self.exhausts.len()
+            + self.explosions.len()
+            + self.stars.len()
     }
 
     pub fn add(&mut self, entity: Entity) -> usize {
@@ -93,6 +102,10 @@ impl Entities {
                 self.explosions.push(EntityId { id, entity });
                 EntityIndex::Explosion(self.explosions.len() - 1)
             }
+            Entity::Star(entity) => {
+                self.stars.push(EntityId { id, entity });
+                EntityIndex::Star(self.stars.len() - 1)
+            }
         };
 
         self.id_map.insert(id, eidx);
@@ -116,6 +129,7 @@ impl Entities {
                 EntityIndex::Projectile(idx) => swap_dead(&mut self.projectiles, map, *idx),
                 EntityIndex::Exhaust(idx) => swap_dead(&mut self.exhausts, map, *idx),
                 EntityIndex::Explosion(idx) => swap_dead(&mut self.explosions, map, *idx),
+                EntityIndex::Star(idx) => swap_dead(&mut self.stars, map, *idx),
             }
         }
     }

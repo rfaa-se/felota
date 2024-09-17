@@ -57,6 +57,7 @@ struct PlayerData {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum Action {
+    Synchronize(u32, u32, Vec<u32>),
     Command(Command),
     ToggleInterpolation,
     ToggleDebug,
@@ -119,7 +120,7 @@ impl Play {
     }
 
     pub fn update(&mut self, h: &mut RaylibHandle, bus: &mut Bus) {
-        self.action(bus);
+        self.action(bus, h);
 
         if !self.synchronized {
             return;
@@ -262,35 +263,8 @@ impl Play {
         match msg {
             Message::Net(msg) => match msg {
                 NetMessage::Synchronize(seed, cid, cids) => {
-                    // set the networking data
-                    self.network_data.seed = *seed;
-                    self.network_data.client_id = *cid;
-                    self.network_data.client_ids = cids.to_vec();
-
-                    // create the players in the cosmos and set the player data
-                    for client_id in cids.iter() {
-                        let entity = Entity::Triship(self.forge.triship());
-                        let eid = self.entities.add(entity);
-
-                        self.player_data.entity_ids.push(eid);
-                        self.player_data.map.insert(*client_id, eid);
-
-                        if client_id == cid {
-                            self.player_data.player_entity_id = eid;
-                        }
-                    }
-
-                    // commands are scheduled x ticks in the future,
-                    // make sure we can progress for the first ticks
-                    for _ in 0..TICK_SCHEDULED {
-                        self.commands.push(TickCommands {
-                            ready: true,
-                            commands: Vec::new(),
-                        });
-                    }
-
-                    // we are now fully synced and can begin playing!
-                    self.synchronized = true;
+                    self.actions
+                        .insert(Action::Synchronize(*seed, *cid, cids.to_vec()));
                 }
                 NetMessage::Commands(cid, tick, cmds) => {
                     // TODO: this might panic, investigate, make sure the index exists before we access it?
@@ -337,7 +311,7 @@ impl Play {
         );
     }
 
-    fn action(&mut self, bus: &mut Bus) {
+    fn action(&mut self, bus: &mut Bus, h: &mut RaylibHandle) {
         while let Some(action) = self.actions.pop_last() {
             match action {
                 Action::Command(cmd) => {
@@ -348,6 +322,42 @@ impl Play {
                 }
                 Action::ToggleDebug => {
                     bus.send(EngineRequestMessage::ToggleDebug);
+                }
+                Action::Synchronize(seed, cid, cids) => {
+                    // seed the stars
+                    for star in self.forge.stars(h) {
+                        self.entities.add(Entity::Star(star));
+                    }
+
+                    // create the players in the cosmos and set the player data
+                    for client_id in cids.iter() {
+                        let entity = Entity::Triship(self.forge.triship());
+                        let eid = self.entities.add(entity);
+
+                        self.player_data.entity_ids.push(eid);
+                        self.player_data.map.insert(*client_id, eid);
+
+                        if *client_id == cid {
+                            self.player_data.player_entity_id = eid;
+                        }
+                    }
+
+                    // commands are scheduled x ticks in the future,
+                    // make sure we can progress for the first ticks
+                    for _ in 0..TICK_SCHEDULED {
+                        self.commands.push(TickCommands {
+                            ready: true,
+                            commands: Vec::new(),
+                        });
+                    }
+
+                    // set the networking data
+                    self.network_data.seed = seed;
+                    self.network_data.client_id = cid;
+                    self.network_data.client_ids = cids;
+
+                    // we are now fully synced and can begin playing!
+                    self.synchronized = true;
                 }
             }
         }
