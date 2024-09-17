@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use crate::{
     bus::Bus,
     commands::EntityCommands,
-    components::{Generationable, Motion, Shape},
-    constants::{COSMOS_HEIGHT, COSMOS_WIDTH},
+    components::{Generationable, Motion, Renewable, Shape},
+    constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
     entities::{Entities, EntityIndex},
     forge::Forge,
     messages::LogicMessage,
@@ -96,6 +96,35 @@ fn update_particles_stars(entities: &mut Entities) {
             } else {
                 c.a -= amount;
             }
+        }
+
+        let s = &mut x.entity.body.state.new.shape;
+        let mut regen = false;
+
+        if s.x < 0.0 {
+            s.x += STARFIELD_WIDTH as f32;
+            regen = true;
+        }
+
+        if s.x > STARFIELD_WIDTH as f32 {
+            s.x -= STARFIELD_WIDTH as f32;
+            regen = true;
+        }
+
+        if s.y < 0.0 {
+            s.y += STARFIELD_HEIGHT as f32;
+            regen = true;
+        }
+
+        if s.y > STARFIELD_HEIGHT as f32 {
+            s.y -= STARFIELD_HEIGHT as f32;
+            regen = true;
+        }
+
+        if regen {
+            x.entity.body.state.generation();
+            x.entity.body.polygon.dirty = true;
+            x.entity.body.renew();
         }
     });
 }
@@ -213,6 +242,12 @@ fn update_body_generation(entities: &mut Entities) {
                 .iter_mut()
                 .map(|x| &mut x.entity.body as &mut dyn Generationable),
         )
+        .chain(
+            entities
+                .stars
+                .iter_mut()
+                .map(|x| &mut x.entity.body as &mut dyn Generationable),
+        )
         .for_each(|body| body.generation());
 }
 
@@ -249,6 +284,12 @@ fn update_motion(entities: &mut Entities) {
         .chain(
             entities
                 .explosions
+                .iter_mut()
+                .map(|x| (&mut x.entity.motion, false)),
+        )
+        .chain(
+            entities
+                .stars
                 .iter_mut()
                 .map(|x| (&mut x.entity.motion, false)),
         )
@@ -328,6 +369,12 @@ fn update_body(entities: &mut Entities) {
         .chain(
             entities
                 .explosions
+                .iter_mut()
+                .map(|x| (&mut x.entity.body as &mut dyn Shape, &x.entity.motion)),
+        )
+        .chain(
+            entities
+                .stars
                 .iter_mut()
                 .map(|x| (&mut x.entity.body as &mut dyn Shape, &x.entity.motion)),
         )

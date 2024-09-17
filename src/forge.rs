@@ -472,7 +472,15 @@ impl Forge {
                 h.get_random_value::<i32>(1..STARFIELD_HEIGHT - 1) as f32,
             );
             let lifetime = 0;
-            let velocity = Vector2::zero();
+            // 1 in 9 will be moving
+            let velocity = if h.get_random_value::<i32>(0..8) > 7 {
+                Vector2::new(
+                    h.get_random_value::<i32>(-50..50) as f32 / 100.0,
+                    h.get_random_value::<i32>(-50..50) as f32 / 100.0,
+                )
+            } else {
+                Vector2::zero()
+            };
             let acceleration = 0.0;
             let color = Color::new(
                 h.get_random_value::<i32>(100..255) as u8,

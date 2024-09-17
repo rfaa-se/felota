@@ -4,7 +4,7 @@ use raylib::prelude::*;
 
 use crate::{
     components::{Centroidable, Cullable, Lerpable, Triangle},
-    constants::{COSMOS_HEIGHT, COSMOS_WIDTH},
+    constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
     entities::Entities,
 };
 
@@ -23,7 +23,9 @@ impl Renderer {
         debug: bool,
         delta: f32,
     ) {
-        r.draw_rectangle_lines_ex(viewport, 1.0, Color::RED);
+        if debug {
+            r.draw_rectangle_lines_ex(viewport, 1.0, Color::RED);
+        }
 
         r.draw_rectangle_lines(0, 0, COSMOS_WIDTH, COSMOS_HEIGHT, Color::RED);
 
@@ -42,16 +44,77 @@ fn draw_stars(
     delta: f32,
 ) {
     for star in &entities.stars {
-        let bounds = star.entity.body.polygon.bounds_real.lerp(delta);
-
-        // if bounds.cull(viewport) {
-        //     continue;
-        // }
-
         let gen = &star.entity.body.state;
-        let ent = gen.lerp(delta);
+        let mut ent = gen.lerp(delta);
 
-        r.draw_pixel_v(ent, star.entity.body.color);
+        let min_x = if viewport.x < 0.0 {
+            0.0
+        } else {
+            if viewport.x > COSMOS_WIDTH as f32 {
+                COSMOS_WIDTH as f32
+            } else {
+                viewport.x
+            }
+        };
+
+        let max_x = if viewport.x + viewport.width > COSMOS_WIDTH as f32 {
+            COSMOS_WIDTH as f32
+        } else {
+            viewport.x + viewport.width
+        };
+
+        let min_y = if viewport.y < 0.0 {
+            0.0
+        } else {
+            if viewport.y > COSMOS_HEIGHT as f32 {
+                COSMOS_HEIGHT as f32
+            } else {
+                viewport.y
+            }
+        };
+
+        let max_y = if viewport.y + viewport.height > COSMOS_HEIGHT as f32 {
+            COSMOS_HEIGHT as f32
+        } else {
+            viewport.y + viewport.height
+        };
+
+        while ent.x < min_x {
+            ent.x += STARFIELD_WIDTH as f32;
+        }
+
+        while ent.y < min_y {
+            ent.y += STARFIELD_HEIGHT as f32;
+        }
+
+        if ent.x > max_x {
+            continue;
+        }
+
+        if ent.y > max_y {
+            continue;
+        }
+
+        let x = ent.x;
+
+        loop {
+            loop {
+                r.draw_pixel_v(ent, star.entity.body.color);
+
+                ent.x += STARFIELD_WIDTH as f32;
+
+                if ent.x > max_x {
+                    break;
+                }
+            }
+
+            ent.y += STARFIELD_HEIGHT as f32;
+            ent.x = x;
+
+            if ent.y > max_y {
+                break;
+            }
+        }
     }
 }
 
