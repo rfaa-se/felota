@@ -222,10 +222,14 @@ impl Play {
             // TODO: should not be smaller than the screen,
             // only smaller now to make sure code works when culling is implemented
             let viewport = Rectangle {
-                x: self.camera.target.x - self.camera.offset.x + 100.0,
-                y: self.camera.target.y - self.camera.offset.y + 100.0,
-                width: self.camera.offset.x * 2.0 - 200.0,
-                height: self.camera.offset.y * 2.0 - 200.0,
+                x: self.camera.target.x - self.camera.offset.x,
+                y: self.camera.target.y - self.camera.offset.y,
+                width: self.camera.offset.x * 2.0,
+                height: self.camera.offset.y * 2.0,
+                // x: self.camera.target.x - self.camera.offset.x + 100.0,
+                // y: self.camera.target.y - self.camera.offset.y + 100.0,
+                // width: self.camera.offset.x * 2.0 - 200.0,
+                // height: self.camera.offset.y * 2.0 - 200.0,
             };
 
             if self.debug {

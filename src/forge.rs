@@ -50,8 +50,8 @@ impl Forge {
                 speed_max: 20.0,
                 acceleration: 1.02,
                 rotation_speed: 0.0,
-                rotation_acceleration: 0.02,
-                rotation_speed_max: 0.24,
+                rotation_acceleration: 0.016,
+                rotation_speed_max: 0.28,
             },
             boost: Boost {
                 acceleration: 1.6,
@@ -384,18 +384,16 @@ impl Forge {
         exhaust
     }
 
-    pub fn _exhaust_thruster_bow(
+    pub fn exhaust_thruster_bow(
         &self,
         position_port: Vector2,
         position_starboard: Vector2,
-        initial_velocity: Vector2,
         rotation: Vector2,
+        initial_velocity: Vector2,
         h: &mut RaylibHandle,
     ) -> Vec<Particle> {
-        // TODO
         let mut exhaust = Vec::new();
-
-        // let originator_velocity = originator_velocity * -1.0;
+        exhaust.reserve_exact(10);
 
         exhaust.append(&mut self.exhaust_thruster_side(
             position_port,
@@ -475,8 +473,8 @@ impl Forge {
             // 1 in 9 will be moving
             let velocity = if h.get_random_value::<i32>(0..8) > 7 {
                 Vector2::new(
-                    h.get_random_value::<i32>(-50..50) as f32 / 100.0,
-                    h.get_random_value::<i32>(-50..50) as f32 / 100.0,
+                    h.get_random_value::<i32>(-50..50) as f32 / 1000.0,
+                    h.get_random_value::<i32>(-50..50) as f32 / 1000.0,
                 )
             } else {
                 Vector2::zero()

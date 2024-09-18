@@ -131,8 +131,8 @@ fn handle_accelerate(
 fn handle_decelerate(
     entities: &mut Entities,
     eidx: EntityIndex,
-    _forge: &Forge,
-    _h: &mut RaylibHandle,
+    forge: &Forge,
+    h: &mut RaylibHandle,
 ) {
     let (rotation, motion) = match eidx {
         EntityIndex::Triship(idx) => {
@@ -145,7 +145,29 @@ fn handle_decelerate(
     motion.velocity -= rotation * (motion.acceleration / 4.0);
 
     // spawn exhaust particles if it's a triship
-    // TODO: we want two thrusters on each side of the ship
+    if let EntityIndex::Triship(idx) = eidx {
+        let triship = &entities.triships[idx].entity;
+        let initial_velocity = triship.motion.velocity;
+        let vertexes = &triship.body.polygon.vertexes.new;
+
+        // calculate the placement position of the left thruster
+        let position_left = Vector2::new(
+            vertexes[2].x * 0.2 + vertexes[1].x * 0.8,
+            vertexes[2].y * 0.2 + vertexes[1].y * 0.8,
+        );
+
+        // calculate the placement position of the right thruster
+        let position_right = Vector2::new(
+            vertexes[0].x * 0.2 + vertexes[1].x * 0.8,
+            vertexes[0].y * 0.2 + vertexes[1].y * 0.8,
+        );
+
+        for exhaust in
+            forge.exhaust_thruster_bow(position_left, position_right, rotation, initial_velocity, h)
+        {
+            entities.add(Entity::Exhaust(exhaust));
+        }
+    }
 }
 
 fn handle_rotate_left(
@@ -211,7 +233,7 @@ fn handle_rotate_right(
         let initial_velocity = triship.motion.velocity;
         let vertexes = &triship.body.polygon.vertexes.new;
 
-        // calculate the placement position of the thruster
+        // calculate the placement position of the right thruster
         let position = Vector2::new(
             vertexes[0].x * 0.2 + vertexes[1].x * 0.8,
             vertexes[0].y * 0.2 + vertexes[1].y * 0.8,

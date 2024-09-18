@@ -18,7 +18,7 @@ use raylib::prelude::*;
 use collisions::*;
 
 const COSMIC_DRAG: Vector2 = Vector2::new(0.1, 0.1);
-const COSMIC_DRAG_ROTATION: f32 = 0.003;
+const COSMIC_DRAG_ROTATION: f32 = 0.002;
 
 pub struct Logic {
     dead: BTreeSet<usize>,
