@@ -18,6 +18,12 @@ pub enum Command {
     RotateRight,
     Projectile,
     Boost,
+    Torpedo,
+}
+
+enum Exhaust {
+    Triship,
+    Torpedo,
 }
 
 const ACCELERATE: u8 = 1;
@@ -26,6 +32,7 @@ const ROTATE_LEFT: u8 = 3;
 const ROTATE_RIGHT: u8 = 4;
 const PROJECTILE: u8 = 5;
 const BOOST: u8 = 6;
+const TORPEDO: u8 = 7;
 
 impl Command {
     pub fn execute(
@@ -45,7 +52,8 @@ impl Command {
             Command::RotateLeft => handle_rotate_left(entities, eidx, forge, h),
             Command::RotateRight => handle_rotate_right(entities, eidx, forge, h),
             Command::Projectile => handle_projectile(entities, eidx, eid, forge),
-            Command::Boost => handle_boost(entities, eidx, eid, forge),
+            Command::Boost => handle_boost(entities, eidx),
+            Command::Torpedo => handle_torpedo(entities, eidx, eid, forge),
         }
     }
 
@@ -61,6 +69,7 @@ impl Command {
             ROTATE_RIGHT => Command::RotateRight,
             PROJECTILE => Command::Projectile,
             BOOST => Command::Boost,
+            TORPEDO => Command::Torpedo,
             _ => panic!("wtf ctype {}", ctype),
         }
     }
@@ -82,6 +91,7 @@ impl Command {
             Command::RotateRight => bytes.push(ROTATE_RIGHT),
             Command::Projectile => bytes.push(PROJECTILE),
             Command::Boost => bytes.push(BOOST),
+            Command::Torpedo => bytes.push(TORPEDO),
         }
 
         bytes.into_boxed_slice()
@@ -99,32 +109,56 @@ fn handle_accelerate(
             let e = &mut entities.triships[idx].entity;
             (e.body.state.new.rotation, &mut e.motion)
         }
-        _ => return,
+        EntityIndex::Torpedo(idx) => {
+            let e = &mut entities.torpedoes[idx].entity;
+            (e.body.state.new.rotation, &mut e.motion)
+        }
+        _ => panic!("wtf accelerate {:?}", eidx),
     };
 
     motion.velocity += rotation * motion.acceleration;
 
-    // spawn exhaust particles if it's a triship
-    if let EntityIndex::Triship(idx) = eidx {
-        let initial_velocity = motion.velocity;
-        let triship = &entities.triships[idx].entity;
-        let vertexes = &triship.body.polygon.vertexes.new;
+    // spawn exhaust particles
+    let initial_velocity = motion.velocity;
+    // e-type o7
+    let (position, etype) = match eidx {
+        EntityIndex::Triship(idx) => {
+            let e = &entities.triships[idx].entity;
+            let v = &e.body.polygon.vertexes.new;
 
-        // calculate the placement position of the afterburner
-        let position = Vector2::new(
-            (vertexes[0].x + vertexes[2].x) / 2.0,
-            (vertexes[0].y + vertexes[2].y) / 2.0,
-        );
-
-        // rotate 180 degrees, we want the exhaust to be pointed away from the rotation of the entity
-        let exhaust_rotation = Vector2 {
-            x: rotation.x * -1.0,
-            y: rotation.y * -1.0,
-        };
-
-        for exhaust in forge.exhaust_afterburner(position, exhaust_rotation, initial_velocity, h) {
-            entities.add(Entity::Exhaust(exhaust));
+            (
+                Vector2::new((v[0].x + v[2].x) / 2.0, (v[0].y + v[2].y) / 2.0),
+                Exhaust::Triship,
+            )
         }
+        // no exhaust if torpedo is still inactive
+        EntityIndex::Torpedo(idx) if entities.torpedoes[idx].entity.timer_inactive == 0 => {
+            let e = &entities.torpedoes[idx].entity;
+            let v = &e.body.polygon.vertexes.new;
+
+            (
+                Vector2::new((v[1].x + v[2].x) / 2.0, (v[1].y + v[2].y) / 2.0),
+                Exhaust::Torpedo,
+            )
+        }
+        _ => return,
+    };
+
+    // rotate 180 degrees, we want the exhaust to be pointed away from the rotation of the entity
+    let exhaust_rotation = Vector2 {
+        x: rotation.x * -1.0,
+        y: rotation.y * -1.0,
+    };
+
+    let exhausts = match etype {
+        Exhaust::Triship => {
+            forge.exhaust_afterburner(position, exhaust_rotation, initial_velocity, h)
+        }
+        Exhaust::Torpedo => forge.exhaust_torpedo(position, exhaust_rotation, initial_velocity, h),
+    };
+
+    for exhaust in exhausts {
+        entities.add(Entity::Exhaust(exhaust));
     }
 }
 
@@ -139,7 +173,7 @@ fn handle_decelerate(
             let e = &mut entities.triships[idx].entity;
             (e.body.state.new.rotation, &mut e.motion)
         }
-        _ => return,
+        _ => panic!("wtf decelerate {:?}", eidx),
     };
 
     motion.velocity -= rotation * (motion.acceleration / 4.0);
@@ -181,7 +215,7 @@ fn handle_rotate_left(
             let e = &mut entities.triships[idx].entity;
             (&mut e.motion, e.body.state.old.rotation)
         }
-        _ => return,
+        _ => panic!("wtf rotate left {:?}", eidx),
     };
 
     motion.rotation_speed -= motion.rotation_acceleration;
@@ -204,8 +238,7 @@ fn handle_rotate_left(
             y: old_rotation.x,
         };
 
-        for exhaust in forge.exhaust_thruster_side(position, exhaust_rotation, initial_velocity, h)
-        {
+        for exhaust in forge.exhaust_thruster(position, exhaust_rotation, initial_velocity, h) {
             entities.add(Entity::Exhaust(exhaust));
         }
     }
@@ -222,7 +255,7 @@ fn handle_rotate_right(
             let e = &mut entities.triships[idx].entity;
             (&mut e.motion, e.body.state.old.rotation)
         }
-        _ => return,
+        _ => panic!("wtf rotate right {:?}", eidx),
     };
 
     motion.rotation_speed += motion.rotation_acceleration;
@@ -245,8 +278,7 @@ fn handle_rotate_right(
             y: old_rotation.x * -1.0,
         };
 
-        for exhaust in forge.exhaust_thruster_side(position, exhaust_rotation, initial_velocity, h)
-        {
+        for exhaust in forge.exhaust_thruster(position, exhaust_rotation, initial_velocity, h) {
             entities.add(Entity::Exhaust(exhaust));
         }
     }
@@ -258,7 +290,7 @@ fn handle_projectile(entities: &mut Entities, eidx: EntityIndex, id: usize, forg
             let e = &entities.triships[idx].entity;
             (&e.body, e.motion.velocity)
         }
-        _ => return,
+        _ => panic!("wtf projectile {:?}", eidx),
     };
 
     let rotation = body.state.new.rotation;
@@ -268,13 +300,13 @@ fn handle_projectile(entities: &mut Entities, eidx: EntityIndex, id: usize, forg
     entities.add(Entity::Projectile(projectile));
 }
 
-fn handle_boost(entities: &mut Entities, eidx: EntityIndex, _id: usize, _forge: &Forge) {
+fn handle_boost(entities: &mut Entities, eidx: EntityIndex) {
     let (motion, boost) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
             (&mut e.motion, &mut e.boost)
         }
-        _ => return,
+        _ => panic!("wtf boost {:?}", eidx),
     };
 
     if boost.active {
@@ -282,11 +314,37 @@ fn handle_boost(entities: &mut Entities, eidx: EntityIndex, _id: usize, _forge: 
     }
 
     boost.active = true;
-    boost.lifetime = boost.lifetime_max;
-    boost.cooldown = boost.cooldown_max;
+    boost.lifetime.current = boost.lifetime.max;
+    boost.cooldown.current = boost.cooldown.max;
     boost.speed_max_old = motion.speed_max;
     boost.acceleration_old = motion.acceleration;
 
     motion.speed_max = boost.speed_max;
     motion.acceleration = boost.acceleration;
+}
+
+fn handle_torpedo(entities: &mut Entities, eidx: EntityIndex, id: usize, forge: &Forge) {
+    let (body, velocity, cooldown) = match eidx {
+        EntityIndex::Triship(idx) => {
+            let e = &mut entities.triships[idx].entity;
+            (&e.body, e.motion.velocity, &mut e.cooldown_torpedo)
+        }
+        _ => panic!("wtf torpedo {:?}", eidx),
+    };
+
+    if cooldown.current != 0 {
+        return;
+    }
+
+    cooldown.current = cooldown.max;
+
+    let rotation = body.state.new.rotation;
+    let vertexes = &body.polygon.vertexes.new;
+    let position = Vector2::new(
+        vertexes[0].x * 0.25 + vertexes[1].x * 0.75,
+        vertexes[0].y * 0.25 + vertexes[1].y * 0.75,
+    );
+    let torpedo = forge.torpedo(position, rotation, velocity, id);
+
+    entities.add(Entity::Torpedo(torpedo));
 }

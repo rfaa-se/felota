@@ -37,7 +37,7 @@ impl Forge {
             life: 100.0,
             body: Body {
                 state: Generation { old: s, new: s },
-                color: Color::RED,
+                color: Color::DIMGRAY,
                 polygon: Polygon {
                     dirty: false,
                     vertexes: v_gen,
@@ -47,7 +47,7 @@ impl Forge {
             },
             motion: Motion {
                 velocity: Vector2::zero(),
-                speed_max: 20.0,
+                speed_max: 18.0,
                 acceleration: 1.02,
                 rotation_speed: 0.0,
                 rotation_acceleration: 0.016,
@@ -58,11 +58,19 @@ impl Forge {
                 acceleration_old: 0.0,
                 speed_max: 40.0,
                 speed_max_old: 0.0,
-                lifetime: 0,
-                lifetime_max: 100,
-                cooldown: 0,
-                cooldown_max: 50,
+                lifetime: Load {
+                    current: 0,
+                    max: 100,
+                },
+                cooldown: Load {
+                    current: 0,
+                    max: 50,
+                },
                 active: false,
+            },
+            cooldown_torpedo: Load {
+                current: 0,
+                max: 25,
             },
         }
     }
@@ -117,13 +125,72 @@ impl Forge {
             },
             motion: Motion {
                 velocity: initial_velocity + direction * speed,
-                acceleration: 1.1,
-                speed_max: 40.0,
+                acceleration: 1.0,
+                speed_max: 30.0,
                 rotation_speed: 0.0,
                 rotation_acceleration: 0.0,
                 rotation_speed_max: 0.0,
             },
             owner_id,
+        }
+    }
+
+    pub fn torpedo(
+        &self,
+        position: Vector2,
+        direction: Vector2,
+        initial_velocity: Vector2,
+        owner_id: usize,
+    ) -> Torpedo {
+        let width = 8.0;
+        let height = 3.0;
+        let distance = direction * width;
+        let p = Vector2::new(position.x + distance.x, position.y + distance.y);
+        let s = RotatedShape {
+            shape: Rectangle {
+                x: p.x - width / 2.0,
+                y: p.y - height / 2.0,
+                width,
+                height,
+            },
+            rotation: direction,
+        };
+        let v = s.shape.vertexes(direction);
+        let b = v.bounds();
+        let v_gen = Generation {
+            old: v.clone(),
+            new: v,
+        };
+        let b_gen = Generation { old: b, new: b };
+        let speed = 10.0;
+
+        // we want the torp to be launched sideways,
+        // then once the timer_inactive is 0 it will start
+        // accelerating in the requested direction
+        let direction = Vector2::new(direction.y, direction.x * -1.0);
+
+        Torpedo {
+            damage: 2.0,
+            body: Body {
+                state: Generation { old: s, new: s },
+                color: Color::GRAY,
+                polygon: Polygon {
+                    dirty: false,
+                    vertexes: v_gen,
+                    bounds_real: b_gen,
+                    bounds_meld: b_gen,
+                },
+            },
+            motion: Motion {
+                velocity: initial_velocity + direction * speed,
+                acceleration: 1.1,
+                speed_max: 30.0,
+                rotation_speed: 0.0,
+                rotation_acceleration: 0.0,
+                rotation_speed_max: 0.0,
+            },
+            owner_id,
+            timer_inactive: 2,
         }
     }
 
@@ -343,7 +410,48 @@ impl Forge {
         exhaust
     }
 
-    pub fn exhaust_thruster_side(
+    pub fn exhaust_torpedo(
+        &self,
+        position: Vector2,
+        rotation: Vector2,
+        initial_velocity: Vector2,
+        h: &mut RaylibHandle,
+    ) -> Vec<Particle> {
+        let mut exhaust = Vec::new();
+        exhaust.reserve_exact(3);
+
+        let v = [1, 2, 1];
+        let neg_half = -((v.len() / 2) as f32);
+
+        // rotate by 90 degrees so we can start placing the particles in a line
+        let rot = Vector2 {
+            x: rotation.y,
+            y: rotation.x * -1.0,
+        };
+
+        for i in 0..v.len() {
+            for j in 0..v[i] {
+                let pos = Vector2 {
+                    x: neg_half + i as f32,
+                    y: 0.0,
+                }
+                .rotated(rot.y.atan2(rot.x))
+                .add(position);
+
+                // some random values to make it look awesome
+                let lifetime = (h.get_random_value::<i32>(0..4) + j) as u8;
+                let speed = h.get_random_value::<i32>(1..6) as f32;
+                let velocity = initial_velocity + rotation * speed;
+                let acceleration = h.get_random_value::<i32>(1..4) as f32;
+
+                exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration));
+            }
+        }
+
+        exhaust
+    }
+
+    pub fn exhaust_thruster(
         &self,
         position: Vector2,
         rotation: Vector2,
@@ -395,14 +503,9 @@ impl Forge {
         let mut exhaust = Vec::new();
         exhaust.reserve_exact(10);
 
-        exhaust.append(&mut self.exhaust_thruster_side(
-            position_port,
-            rotation,
-            initial_velocity,
-            h,
-        ));
+        exhaust.append(&mut self.exhaust_thruster(position_port, rotation, initial_velocity, h));
 
-        exhaust.append(&mut self.exhaust_thruster_side(
+        exhaust.append(&mut self.exhaust_thruster(
             position_starboard,
             rotation,
             initial_velocity,

@@ -6,7 +6,7 @@ use crate::{
     components::{Boundable, Centroidable, Generation, Shape},
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
-    misc::{Node, NodeType, QuadTree},
+    quadtree::{Node, NodeType, QuadTree},
 };
 
 pub fn update_collision_reaction(
@@ -21,15 +21,59 @@ pub fn update_collision_reaction(
             (EntityIndex::Triship(idx1), EntityIndex::Triship(idx2)) => {
                 handle_triship_triship(idx1, idx2, entities, forge, h)
             }
-            (EntityIndex::Triship(idx_t), EntityIndex::Projectile(idx_p))
-            | (EntityIndex::Projectile(idx_p), EntityIndex::Triship(idx_t)) => {
-                handle_triship_projectile(idx_t, idx_p, entities, dead, forge, h)
+            (EntityIndex::Triship(idx_tri), EntityIndex::Projectile(idx_pro))
+            | (EntityIndex::Projectile(idx_pro), EntityIndex::Triship(idx_tri)) => {
+                handle_triship_projectile(idx_tri, idx_pro, entities, dead, forge, h)
             }
             (EntityIndex::Projectile(idx1), EntityIndex::Projectile(idx2)) => {
                 handle_projectile_projectile(idx1, idx2, entities, dead, forge, h)
             }
+            (EntityIndex::Torpedo(idx_tor), EntityIndex::Triship(idx_tri))
+            | (EntityIndex::Triship(idx_tri), EntityIndex::Torpedo(idx_tor)) => {
+                handle_triship_torpedo(idx_tri, idx_tor, entities, dead, forge, h)
+            }
+            (EntityIndex::Torpedo(idx_tor), EntityIndex::Projectile(idx_pro))
+            | (EntityIndex::Projectile(idx_pro), EntityIndex::Torpedo(idx_tor)) => {
+                handle_projectile_torpedo(idx_pro, idx_tor, entities, dead, forge, h)
+            }
+            (EntityIndex::Torpedo(idx1), EntityIndex::Torpedo(idx2)) => {
+                handle_torpedo_torpedo(idx1, idx2, entities, dead, forge, h)
+            }
             _ => (),
         }
+    }
+
+    fn handle_torpedo_torpedo(
+        _idx1: usize,
+        _idx2: usize,
+        _entities: &mut Entities,
+        _dead: &mut BTreeSet<usize>,
+        _forge: &Forge,
+        _h: &mut RaylibHandle,
+    ) {
+        // TODO
+    }
+
+    fn handle_projectile_torpedo(
+        _idx_p: usize,
+        _idx_m: usize,
+        _entities: &mut Entities,
+        _dead: &mut BTreeSet<usize>,
+        _forge: &Forge,
+        _h: &mut RaylibHandle,
+    ) {
+        // TODO
+    }
+
+    fn handle_triship_torpedo(
+        _idx_t: usize,
+        _idx_m: usize,
+        _entities: &mut Entities,
+        _dead: &mut BTreeSet<usize>,
+        _forge: &Forge,
+        _h: &mut RaylibHandle,
+    ) {
+        // TODO
     }
 
     fn handle_triship_projectile(
@@ -120,6 +164,7 @@ pub fn update_collision_detection(
         .iter()
         .map(|x| x.id)
         .chain(entities.projectiles.iter().map(|x| x.id))
+        .chain(entities.torpedoes.iter().map(|x| x.id))
         .for_each(|eid| {
             quadtree.add(eid, &entities);
         });
@@ -244,23 +289,43 @@ pub fn update_collision_detection(
                                     //     dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
                                     //     entities,
                                     // );
+                                    //
                                     // reposition(
                                     //     eidx2,
                                     //     dir2 * -1.0 * speed_max2 + dir2 * speed_cur2,
                                     //     entities,
                                     // );
                                 }
-                                (EntityIndex::Triship(_), EntityIndex::Projectile(_)) => {
+                                (
+                                    EntityIndex::Triship(_),
+                                    EntityIndex::Projectile(_) | EntityIndex::Torpedo(_),
+                                ) => {
                                     reposition(
                                         eidx2,
                                         dir2 * -1.0 * speed_max2 + dir2 * speed_cur2,
                                         entities,
                                     );
                                 }
-                                (EntityIndex::Projectile(_), EntityIndex::Triship(_)) => {
+                                (
+                                    EntityIndex::Projectile(_) | EntityIndex::Torpedo(_),
+                                    EntityIndex::Triship(_),
+                                ) => {
+                                    // reposition(
+                                    //     eidx1,
+                                    //     dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
+                                    //     entities,
+                                    // );
+                                }
+                                (EntityIndex::Torpedo(_), EntityIndex::Torpedo(_)) => {
                                     reposition(
                                         eidx1,
                                         dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
+                                        entities,
+                                    );
+
+                                    reposition(
+                                        eidx2,
+                                        dir2 * -1.0 * speed_max2 + dir2 * speed_cur2,
                                         entities,
                                     );
                                 }
@@ -292,6 +357,7 @@ pub fn update_collision_detection(
         match eidx {
             EntityIndex::Triship(idx) => &entities.triships[idx].entity.body.polygon.vertexes,
             EntityIndex::Projectile(idx) => &entities.projectiles[idx].entity.body.polygon.vertexes,
+            EntityIndex::Torpedo(idx) => &entities.torpedoes[idx].entity.body.polygon.vertexes,
             _ => panic!("vertexes {:?}", eidx),
         }
     }
@@ -300,6 +366,7 @@ pub fn update_collision_detection(
         match eidx {
             EntityIndex::Triship(idx) => &entities.triships[idx].entity.body.polygon,
             EntityIndex::Projectile(idx) => &entities.projectiles[idx].entity.body.polygon,
+            EntityIndex::Torpedo(idx) => &entities.torpedoes[idx].entity.body.polygon,
             _ => panic!("bounds {:?}", eidx),
         }
         .bounds_meld
@@ -312,6 +379,7 @@ pub fn update_collision_detection(
             EntityIndex::Projectile(idx) => {
                 &mut entities.projectiles[idx].entity.body as &mut dyn Shape
             }
+            EntityIndex::Torpedo(idx) => &mut entities.torpedoes[idx].entity.body as &mut dyn Shape,
             _ => panic!("shape {:?}", eidx),
         }
     }

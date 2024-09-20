@@ -4,15 +4,18 @@ pub enum ClientPacket {
     Synchronize(u32, u32, Box<[u32]>),
     Commands(u32, u32, Box<[Command]>),
     Start,
+    TogglePause(u32),
 }
 
 pub enum ServerPacket {
     Commands(u32, Box<[Command]>),
+    TogglePause,
 }
 
 const SYNCHRONIZE: u8 = 1;
 const COMMANDS: u8 = 2;
 const START: u8 = 3;
+const TOGGLE_PAUSE: u8 = 4;
 
 impl ClientPacket {
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -69,6 +72,11 @@ impl ClientPacket {
                 ClientPacket::Commands(cid, tick, cmds.into_boxed_slice())
             }
             START => ClientPacket::Start,
+            TOGGLE_PAUSE => {
+                let cid = u32::from_be_bytes(data.try_into().expect("wtf pause"));
+
+                ClientPacket::TogglePause(cid)
+            }
             _ => panic!("wtf ptype {}", ptype),
         }
     }
@@ -96,6 +104,10 @@ impl ClientPacket {
                 }
             }
             ClientPacket::Start => bytes.push(START),
+            ClientPacket::TogglePause(cid) => {
+                bytes.push(TOGGLE_PAUSE);
+                bytes.extend_from_slice(&cid.to_be_bytes());
+            }
         }
 
         bytes.into_boxed_slice()
@@ -132,6 +144,8 @@ impl ServerPacket {
 
                 ServerPacket::Commands(tick, cmds.into_boxed_slice())
             }
+            TOGGLE_PAUSE => ServerPacket::TogglePause,
+
             _ => panic!("wtf ptype {}", ptype),
         }
     }
@@ -147,6 +161,9 @@ impl ServerPacket {
                 for cmd in cmds.iter() {
                     bytes.extend_from_slice(&cmd.to_bytes());
                 }
+            }
+            ServerPacket::TogglePause => {
+                bytes.push(TOGGLE_PAUSE);
             }
         }
 

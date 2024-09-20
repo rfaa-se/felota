@@ -45,11 +45,14 @@ pub struct Boost {
     pub speed_max: f32,
     pub acceleration_old: f32,
     pub speed_max_old: f32,
-    pub lifetime: u8,
-    pub lifetime_max: u8,
-    pub cooldown: u8,
-    pub cooldown_max: u8,
+    pub lifetime: Load,
+    pub cooldown: Load,
     pub active: bool,
+}
+
+pub struct Load {
+    pub current: u8,
+    pub max: u8,
 }
 
 pub struct Polygon {

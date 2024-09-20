@@ -38,6 +38,7 @@ impl Engine {
         let (mut handle, thread) = raylib::init()
             .size(WINDOW_WIDTH, WINDOW_HEIGHT)
             .title("felota")
+            .log_level(TraceLogLevel::LOG_ERROR)
             .build();
 
         let render_texture =

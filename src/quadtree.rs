@@ -82,6 +82,7 @@ fn bounds(eidx: EntityIndex, entities: &Entities) -> Rectangle {
     match eidx {
         EntityIndex::Triship(idx) => &entities.triships[idx].entity.body.polygon,
         EntityIndex::Projectile(idx) => &entities.projectiles[idx].entity.body.polygon,
+        EntityIndex::Torpedo(idx) => &entities.torpedoes[idx].entity.body.polygon,
         _ => panic!("bounds {:?}", eidx),
     }
     .bounds_meld

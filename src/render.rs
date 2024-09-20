@@ -6,6 +6,7 @@ use crate::{
     components::{Centroidable, Cullable, Lerpable, Triangle},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
     entities::Entities,
+    math::*,
 };
 
 pub struct Renderer {}
@@ -34,6 +35,7 @@ impl Renderer {
         draw_exhausts(r, entities, viewport, delta);
         draw_explosions(r, entities, viewport, delta);
         draw_projectiles(r, entities, viewport, delta);
+        draw_torpedoes(r, entities, viewport, delta);
     }
 }
 
@@ -152,6 +154,40 @@ fn draw_projectiles(
     }
 }
 
+fn draw_torpedoes(
+    r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
+    entities: &Entities,
+    viewport: Rectangle,
+    delta: f32,
+) {
+    for torpedo in &entities.torpedoes {
+        let bounds = torpedo.entity.body.polygon.bounds_real.lerp(delta);
+
+        if bounds.cull(viewport) {
+            continue;
+        }
+
+        let gen = torpedo.entity.body.state;
+        let rot = gen.old.rotation.lerp(gen.new.rotation, delta);
+        let rad = rot.y.atan2(rot.x);
+        let deg = rad.to_degrees();
+        let ent = gen.lerp(delta);
+
+        // for some reason we need to add half the width and height to rotated rectangle's x and y
+        r.draw_rectangle_pro(
+            Rectangle {
+                x: ent.x + ent.width / 2.0,
+                y: ent.y + ent.height / 2.0,
+                width: ent.width,
+                height: ent.height,
+            },
+            Vector2::new(ent.width / 2.0, ent.height / 2.0),
+            deg,
+            torpedo.entity.body.color,
+        );
+    }
+}
+
 fn draw_explosions(
     r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
     entities: &Entities,
@@ -189,13 +225,6 @@ fn draw_exhausts(
         let ent = gen.lerp(delta);
 
         r.draw_pixel_v(ent, exhaust.entity.body.color);
-    }
-}
-
-fn rotate(point: Vector2, origin: Vector2, sin: f32, cos: f32) -> Vector2 {
-    Vector2 {
-        x: (cos * (point.x - origin.x)) - (sin * (point.y - origin.y)) + origin.x,
-        y: (sin * (point.x - origin.x)) + (cos * (point.y - origin.y)) + origin.y,
     }
 }
 

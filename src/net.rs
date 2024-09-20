@@ -28,6 +28,7 @@ enum Action {
     Start,
     Disconnect,
     Shutdown,
+    TogglePause,
 }
 
 const PORT: u16 = 1337;
@@ -69,6 +70,7 @@ impl System {
                     }
                 }
                 NetRequestMessage::Disconnect => self.actions.push(Action::Disconnect),
+                NetRequestMessage::TogglePause => self.actions.push(Action::TogglePause),
             }
         }
     }
@@ -101,6 +103,9 @@ impl System {
                     }
                     ClientPacket::Start => {
                         bus.send(NetMessage::Start);
+                    }
+                    ClientPacket::TogglePause(cid) => {
+                        bus.send(NetMessage::TogglePause(cid));
                     }
                 },
                 ClientEvent::Error(_) => {
@@ -170,11 +175,18 @@ impl System {
                             );
                         }
                     }
+                    ServerPacket::TogglePause => {
+                        let cid = peer.id();
+                        for client in self.clients.iter_mut() {
+                            client.send(
+                                ClientPacket::TogglePause(cid).to_bytes(),
+                                SendMode::Reliable,
+                            );
+                        }
+                    }
                 },
                 ServerEvent::Error(_peer, error) => match error {
-                    redpine::ErrorKind::Timeout => todo!(),
-                    redpine::ErrorKind::Capacity => todo!(),
-                    redpine::ErrorKind::Parameter => todo!(),
+                    _ => panic!("wtf server error {:?}", error),
                 },
             }
         }
@@ -241,6 +253,11 @@ impl System {
                         }
 
                         self.clients.clear();
+                    }
+                }
+                Action::TogglePause => {
+                    if let Some(client) = self.client.as_mut() {
+                        client.send(ServerPacket::TogglePause.to_bytes(), SendMode::Reliable);
                     }
                 }
             }

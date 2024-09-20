@@ -4,13 +4,13 @@ use std::collections::BTreeSet;
 
 use crate::{
     bus::Bus,
-    commands::EntityCommands,
+    commands::{Command, EntityCommands},
     components::{Generationable, Motion, Renewable, Shape},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
     entities::{Entities, EntityIndex},
     forge::Forge,
     messages::LogicMessage,
-    misc::QuadTree,
+    quadtree::QuadTree,
 };
 
 use raylib::prelude::*;
@@ -24,6 +24,7 @@ pub struct Logic {
     dead: BTreeSet<usize>,
     collisions: Vec<(EntityIndex, EntityIndex)>,
     quadtree: QuadTree,
+    commands: Vec<(usize, Command)>,
 }
 
 impl Logic {
@@ -32,6 +33,7 @@ impl Logic {
             dead: BTreeSet::new(),
             collisions: Vec::new(),
             quadtree: QuadTree::new(COSMOS_WIDTH, COSMOS_HEIGHT),
+            commands: Vec::new(),
         }
     }
 
@@ -45,8 +47,9 @@ impl Logic {
     ) {
         update_dead_removal(entities, &mut self.dead);
         update_body_generation(entities);
-        update_commands(entities, entity_cmds, forge, h);
+        update_commands(entities, entity_cmds, &mut self.commands, forge, h);
         update_boost(entities);
+        update_cooldowns(entities);
         update_motion(entities);
         update_body(entities);
         update_collision_detection(entities, &mut self.quadtree, &mut self.collisions);
@@ -54,6 +57,8 @@ impl Logic {
         update_particles_lifetime(entities, &mut self.dead);
         update_particles_explosions(entities);
         update_particles_stars(entities);
+        update_torpedo_timers(entities);
+        update_commands_accelerate(entities, &mut self.commands);
         update_out_of_bounds(entities, &mut self.dead);
         update_dead_detection(entities, &mut self.dead);
         update_dead_notify(entities, &self.dead, bus);
@@ -65,6 +70,42 @@ impl Logic {
 }
 
 // TODO: move these functions into their own files? need to figure out structure
+
+fn update_torpedo_timers(entities: &mut Entities) {
+    entities
+        .torpedoes
+        .iter_mut()
+        .filter_map(|x| {
+            if x.entity.timer_inactive != 0 {
+                Some(&mut x.entity.timer_inactive)
+            } else {
+                None
+            }
+        })
+        .for_each(|x| {
+            *x -= 1;
+        })
+}
+
+fn update_commands_accelerate(entities: &mut Entities, commands: &mut Vec<(usize, Command)>) {
+    entities.torpedoes.iter().map(|x| x.id).for_each(|x| {
+        commands.push((x, Command::Accelerate));
+    });
+}
+
+fn update_cooldowns(entities: &mut Entities) {
+    entities
+        .triships
+        .iter_mut()
+        .filter_map(|x| {
+            if x.entity.cooldown_torpedo.current != 0 {
+                Some(&mut x.entity.cooldown_torpedo.current)
+            } else {
+                None
+            }
+        })
+        .for_each(|x| *x -= 1);
+}
 
 fn update_particles_stars(entities: &mut Entities) {
     entities.stars.iter_mut().for_each(|x| {
@@ -174,21 +215,21 @@ fn update_boost(entities: &mut Entities) {
         .map(|x| (&mut x.entity.motion, &mut x.entity.boost))
         .filter(|(_, boost)| boost.active)
         .for_each(|(motion, boost)| {
-            if boost.lifetime == 0 {
-                boost.cooldown -= 1;
+            if boost.lifetime.current == 0 {
+                boost.cooldown.current -= 1;
 
-                if boost.cooldown != 0 {
+                if boost.cooldown.current != 0 {
                     return;
                 }
 
                 // cooldown is done, boost is ready
-                boost.cooldown = boost.cooldown_max;
-                boost.lifetime = boost.lifetime_max;
+                boost.cooldown.current = boost.cooldown.max;
+                boost.lifetime.current = boost.lifetime.max;
                 boost.active = false;
             } else {
-                boost.lifetime -= 1;
+                boost.lifetime.current -= 1;
 
-                if boost.lifetime != 0 {
+                if boost.lifetime.current != 0 {
                     return;
                 }
 
@@ -248,12 +289,19 @@ fn update_body_generation(entities: &mut Entities) {
                 .iter_mut()
                 .map(|x| &mut x.entity.body as &mut dyn Generationable),
         )
+        .chain(
+            entities
+                .torpedoes
+                .iter_mut()
+                .map(|x| &mut x.entity.body as &mut dyn Generationable),
+        )
         .for_each(|body| body.generation());
 }
 
 fn update_commands(
     entities: &mut Entities,
     entity_cmds: &[EntityCommands],
+    entity_cmds_internal: &mut Vec<(usize, Command)>,
     forge: &Forge,
     h: &mut RaylibHandle,
 ) {
@@ -261,6 +309,10 @@ fn update_commands(
         for cmd in entity_cmd.commands.iter() {
             cmd.execute(entities, entity_cmd.id, forge, h);
         }
+    }
+
+    while let Some((id, cmd)) = entity_cmds_internal.pop() {
+        cmd.execute(entities, id, forge, h);
     }
 }
 
@@ -290,6 +342,12 @@ fn update_motion(entities: &mut Entities) {
         .chain(
             entities
                 .stars
+                .iter_mut()
+                .map(|x| (&mut x.entity.motion, false)),
+        )
+        .chain(
+            entities
+                .torpedoes
                 .iter_mut()
                 .map(|x| (&mut x.entity.motion, false)),
         )
@@ -329,12 +387,12 @@ fn update_motion(entities: &mut Entities) {
     fn check_speed_max(motion: &mut Motion) {
         // since we can boost we don't want to directly set the velocity to the max speed
         // when we run out of boost, the velocity should slowly decrease until we hit max speed
-        if motion.velocity.length() > motion.speed_max {
+        if motion.velocity.length_sqr() > motion.speed_max.powi(2) {
             let direction = motion.velocity.normalized();
 
             motion.velocity -= direction * motion.acceleration;
 
-            if motion.velocity.length() < motion.speed_max {
+            if motion.velocity.length_sqr() < motion.speed_max.powi(2) {
                 motion.velocity = direction * motion.speed_max;
             }
         }
@@ -378,6 +436,12 @@ fn update_body(entities: &mut Entities) {
                 .iter_mut()
                 .map(|x| (&mut x.entity.body as &mut dyn Shape, &x.entity.motion)),
         )
+        .chain(
+            entities
+                .torpedoes
+                .iter_mut()
+                .map(|x| (&mut x.entity.body as &mut dyn Shape, &x.entity.motion)),
+        )
         .for_each(|(shape, motion)| {
             shape.accelerate(motion.velocity);
             shape.rotate(motion.rotation_speed);
@@ -390,6 +454,12 @@ fn update_out_of_bounds(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
         .projectiles
         .iter()
         .map(|x| (x.id, x.entity.body.polygon.bounds_real.new))
+        .chain(
+            entities
+                .torpedoes
+                .iter()
+                .map(|x| (x.id, x.entity.body.polygon.bounds_real.new)),
+        )
         .for_each(|(id, bounds)| {
             if bounds.x + bounds.width < 0.0
                 || bounds.x > COSMOS_WIDTH as f32

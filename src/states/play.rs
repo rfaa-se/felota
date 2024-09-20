@@ -24,6 +24,7 @@ pub struct Play {
     synchronized: bool,
     debug: bool,
     stalling: bool,
+    paused: bool,
     network_data: NetworkData,
     player_data: PlayerData,
     camera: Camera2D,
@@ -61,6 +62,7 @@ enum Action {
     Command(Command),
     ToggleInterpolation,
     ToggleDebug,
+    TogglePause,
 }
 
 impl Play {
@@ -70,6 +72,7 @@ impl Play {
             synchronized: false,
             debug: false,
             stalling: false,
+            paused: false,
             network_data: NetworkData {
                 client_id: 0,
                 client_ids: Vec::new(),
@@ -122,7 +125,7 @@ impl Play {
     pub fn update(&mut self, h: &mut RaylibHandle, bus: &mut Bus) {
         self.action(bus, h);
 
-        if !self.synchronized {
+        if !self.synchronized || self.paused {
             return;
         }
 
@@ -181,6 +184,10 @@ impl Play {
             self.actions.insert(Action::ToggleDebug);
         }
 
+        if h.is_key_pressed(KeyboardKey::KEY_F3) {
+            self.actions.insert(Action::TogglePause);
+        }
+
         // gameplay
         if h.is_key_down(KeyboardKey::KEY_LEFT) {
             self.actions.insert(Action::Command(Command::RotateLeft));
@@ -205,12 +212,22 @@ impl Play {
         if h.is_key_down(KeyboardKey::KEY_LEFT_SHIFT) {
             self.actions.insert(Action::Command(Command::Boost));
         }
+
+        if h.is_key_down(KeyboardKey::KEY_LEFT_CONTROL) {
+            self.actions.insert(Action::Command(Command::Torpedo));
+        }
     }
 
     pub fn draw(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, delta: f32) {
         if !self.synchronized {
             return;
         }
+
+        let delta = if self.stalling || self.paused {
+            1.0
+        } else {
+            delta
+        };
 
         // make the camera follow the player
         self.camera.target = self.camera_target.old.lerp(self.camera_target.new, delta);
@@ -251,6 +268,17 @@ impl Play {
             );
         }
 
+        if self.paused {
+            let len = r.measure_text("paused", 10);
+            r.draw_text(
+                "paused",
+                RENDER_WIDTH as i32 / 2 - len / 2,
+                RENDER_HEIGHT / 2,
+                10,
+                DEBUG_COLOR,
+            );
+        }
+
         self.draw_hud(r, delta);
 
         r.draw_text(&format!("tick {}", self.tick), 3, 22, 10, DEBUG_COLOR);
@@ -284,6 +312,10 @@ impl Play {
                     // then we have received everything and are ready to progress
                     tick_commands.ready =
                         tick_commands.commands.len() == self.player_data.entity_ids.len();
+                }
+                NetMessage::TogglePause(_cid) => {
+                    // TODO: might be interesting to display toggled pause
+                    self.paused = !self.paused;
                 }
                 _ => return,
             },
@@ -348,7 +380,7 @@ impl Play {
 
                     // commands are scheduled x ticks in the future,
                     // make sure we can progress for the first ticks
-                    for _ in 0..TICK_SCHEDULED {
+                    for _ in 0..=TICK_SCHEDULED {
                         self.commands.push(TickCommands {
                             ready: true,
                             commands: Vec::new(),
@@ -362,6 +394,9 @@ impl Play {
 
                     // we are now fully synced and can begin playing!
                     self.synchronized = true;
+                }
+                Action::TogglePause => {
+                    bus.send(NetRequestMessage::TogglePause);
                 }
             }
         }

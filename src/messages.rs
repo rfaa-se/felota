@@ -16,6 +16,7 @@ pub enum LogicMessage {
 #[derive(Debug)]
 pub enum EngineMessage {
     Request(EngineRequestMessage),
+    // bool is currently not used anywhere
     #[allow(dead_code)]
     ToggleInterpolation(bool),
     ToggleDebug(bool),
@@ -51,6 +52,7 @@ pub enum NetMessage {
     Disconnected,
     Start,
     Commands(u32, u32, Box<[Command]>),
+    TogglePause(u32),
 }
 
 #[derive(Debug)]
@@ -61,6 +63,7 @@ pub enum NetRequestMessage {
     Connect(String),
     Disconnect,
     Commands(u32, Box<[Command]>),
+    TogglePause,
 }
 
 impl Into<Message> for StateMessage {
