@@ -31,8 +31,8 @@ impl Renderer {
         r.draw_rectangle_lines(0, 0, COSMOS_WIDTH, COSMOS_HEIGHT, Color::RED);
 
         draw_stars(r, entities, viewport, delta);
-        draw_triships(r, entities, viewport, debug, delta);
         draw_exhausts(r, entities, viewport, delta);
+        draw_triships(r, entities, viewport, debug, delta);
         draw_explosions(r, entities, viewport, delta);
         draw_projectiles(r, entities, viewport, delta);
         draw_torpedoes(r, entities, viewport, delta);

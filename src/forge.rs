@@ -170,7 +170,7 @@ impl Forge {
         let direction = Vector2::new(direction.y, direction.x * -1.0);
 
         Torpedo {
-            damage: 2.0,
+            damage: 10.0,
             body: Body {
                 state: Generation { old: s, new: s },
                 color: Color::GRAY,
@@ -241,7 +241,41 @@ impl Forge {
     }
 
     pub fn explosion_projectile(&self, position: Vector2, h: &mut RaylibHandle) -> Vec<Particle> {
-        let amount = 16;
+        let amount = 4;
+        let mut explosion = Vec::new();
+        explosion.reserve_exact(amount);
+
+        for _ in 0..amount {
+            let rotation = Vector2::zero();
+            let lifetime = h.get_random_value::<i32>(5..20) as u8;
+            let x = h.get_random_value::<i32>(-200..200) as f32 / 100.0;
+            let y = h.get_random_value::<i32>(-200..200) as f32 / 100.0;
+            let velocity = Vector2::new(x, y);
+            let acceleration = h.get_random_value::<i32>(1..10) as f32;
+            let color = Color::new(
+                h.get_random_value::<i32>(200..255) as u8,
+                h.get_random_value::<i32>(0..10) as u8,
+                h.get_random_value::<i32>(0..10) as u8,
+                h.get_random_value::<i32>(200..255) as u8,
+            );
+            let random = h.get_random_value::<i32>(1..15) as u8;
+
+            explosion.push(self.explosion(
+                position,
+                rotation,
+                lifetime,
+                velocity,
+                acceleration,
+                color,
+                random,
+            ));
+        }
+
+        explosion
+    }
+
+    pub fn explosion_torpedo(&self, position: Vector2, h: &mut RaylibHandle) -> Vec<Particle> {
+        let amount = 32;
         let mut explosion = Vec::new();
         explosion.reserve_exact(amount);
 

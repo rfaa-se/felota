@@ -4,7 +4,7 @@ use raylib::prelude::*;
 
 use crate::{
     components::{Boundable, Centroidable, Generation, Shape},
-    entities::{Entities, Entity, EntityIndex},
+    entities::{Entities, Entity, EntityIndex, Triship},
     forge::Forge,
     quadtree::{Node, NodeType, QuadTree},
 };
@@ -44,36 +44,72 @@ pub fn update_collision_reaction(
     }
 
     fn handle_torpedo_torpedo(
-        _idx1: usize,
-        _idx2: usize,
-        _entities: &mut Entities,
-        _dead: &mut BTreeSet<usize>,
-        _forge: &Forge,
-        _h: &mut RaylibHandle,
+        idx1: usize,
+        idx2: usize,
+        entities: &mut Entities,
+        dead: &mut BTreeSet<usize>,
+        forge: &Forge,
+        h: &mut RaylibHandle,
     ) {
-        // TODO
+        for t in [idx1, idx2] {
+            let t = &entities.torpedoes[t];
+
+            dead.insert(t.id);
+
+            let c = t.entity.body.state.new.shape.centroid();
+
+            // spawn explosion!
+            for explosion in forge.explosion_torpedo(c, h) {
+                entities.add(Entity::Explosion(explosion));
+            }
+        }
     }
 
     fn handle_projectile_torpedo(
-        _idx_p: usize,
-        _idx_m: usize,
-        _entities: &mut Entities,
-        _dead: &mut BTreeSet<usize>,
-        _forge: &Forge,
-        _h: &mut RaylibHandle,
+        idx_p: usize,
+        idx_t: usize,
+        entities: &mut Entities,
+        dead: &mut BTreeSet<usize>,
+        forge: &Forge,
+        h: &mut RaylibHandle,
     ) {
-        // TODO
+        let p = &entities.projectiles[idx_p];
+        let t = &entities.torpedoes[idx_t];
+
+        dead.insert(p.id);
+        dead.insert(t.id);
+
+        let c = t.entity.body.state.new.shape.centroid();
+
+        // spawn explosion!
+        for explosion in forge.explosion_torpedo(c, h) {
+            entities.add(Entity::Explosion(explosion));
+        }
     }
 
     fn handle_triship_torpedo(
-        _idx_t: usize,
-        _idx_m: usize,
-        _entities: &mut Entities,
-        _dead: &mut BTreeSet<usize>,
-        _forge: &Forge,
-        _h: &mut RaylibHandle,
+        idx_tri: usize,
+        idx_tor: usize,
+        entities: &mut Entities,
+        dead: &mut BTreeSet<usize>,
+        forge: &Forge,
+        h: &mut RaylibHandle,
     ) {
-        // TODO
+        let tri = &mut entities.triships[idx_tri];
+        let tor = &entities.torpedoes[idx_tor];
+
+        tri.entity.life -= tor.entity.damage;
+
+        dead.insert(tor.id);
+
+        let c = tor.entity.body.state.new.shape.centroid();
+
+        // spawn explosion!
+        for explosion in forge.explosion_torpedo(c, h) {
+            entities.add(Entity::Explosion(explosion));
+        }
+
+        explode_triship_if_dead(idx_tri, forge, entities, h);
     }
 
     fn handle_triship_projectile(
@@ -96,29 +132,7 @@ pub fn update_collision_reaction(
             entities.add(Entity::Explosion(explosion));
         }
 
-        let t = &entities.triships[idx_t];
-        if t.entity.life <= 0.0 {
-            let c = t.entity.body.state.new.shape.centroid();
-            let d1 = t.entity.body.polygon.vertexes.new[0] - c;
-            let d2 = t.entity.body.polygon.vertexes.new[1] - c;
-            let d3 = t.entity.body.polygon.vertexes.new[2] - c;
-
-            for explosion in forge.explosion_triship(c, h) {
-                entities.add(Entity::Explosion(explosion));
-            }
-
-            for explosion in forge.explosion_projectile(c.add(d1 / 3.0), h) {
-                entities.add(Entity::Explosion(explosion));
-            }
-
-            for explosion in forge.explosion_projectile(c.add(d2 / 3.0), h) {
-                entities.add(Entity::Explosion(explosion));
-            }
-
-            for explosion in forge.explosion_projectile(c.add(d3 / 3.0), h) {
-                entities.add(Entity::Explosion(explosion));
-            }
-        }
+        explode_triship_if_dead(idx_t, forge, entities, h);
     }
 
     fn handle_triship_triship(
@@ -148,6 +162,22 @@ pub fn update_collision_reaction(
         // spawn explosion!
         for explosion in forge.explosion_projectile(p1.entity.body.polygon.vertexes.new[1], h) {
             entities.add(Entity::Explosion(explosion));
+        }
+    }
+
+    fn explode_triship_if_dead(
+        idx: usize,
+        forge: &Forge,
+        entities: &mut Entities,
+        h: &mut RaylibHandle,
+    ) {
+        let t = &entities.triships[idx];
+        if t.entity.life <= 0.0 {
+            let c = t.entity.body.state.new.shape.centroid();
+
+            for explosion in forge.explosion_triship(c, h) {
+                entities.add(Entity::Explosion(explosion));
+            }
         }
     }
 }

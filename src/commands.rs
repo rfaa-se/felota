@@ -137,7 +137,7 @@ fn handle_accelerate(
             let v = &e.body.polygon.vertexes.new;
 
             (
-                Vector2::new((v[1].x + v[2].x) / 2.0, (v[1].y + v[2].y) / 2.0),
+                Vector2::new((v[0].x + v[3].x) / 2.0, (v[0].y + v[3].y) / 2.0),
                 Exhaust::Torpedo,
             )
         }
