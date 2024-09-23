@@ -1,10 +1,8 @@
-use std::{collections::BTreeSet, ops::Add};
-
 use raylib::prelude::*;
 
 use crate::{
     components::{Boundable, Centroidable, Generation, Shape},
-    entities::{Entities, Entity, EntityIndex, Triship},
+    entities::{Entities, Entity, EntityIndex},
     forge::Forge,
     quadtree::{Node, NodeType, QuadTree},
 };
@@ -12,7 +10,6 @@ use crate::{
 pub fn update_collision_reaction(
     entities: &mut Entities,
     collisions: &mut Vec<(EntityIndex, EntityIndex)>,
-    dead: &mut BTreeSet<usize>,
     forge: &Forge,
     h: &mut RaylibHandle,
 ) {
@@ -23,21 +20,21 @@ pub fn update_collision_reaction(
             }
             (EntityIndex::Triship(idx_tri), EntityIndex::Projectile(idx_pro))
             | (EntityIndex::Projectile(idx_pro), EntityIndex::Triship(idx_tri)) => {
-                handle_triship_projectile(idx_tri, idx_pro, entities, dead, forge, h)
+                handle_triship_projectile(idx_tri, idx_pro, entities, forge, h)
             }
             (EntityIndex::Projectile(idx1), EntityIndex::Projectile(idx2)) => {
-                handle_projectile_projectile(idx1, idx2, entities, dead, forge, h)
+                handle_projectile_projectile(idx1, idx2, entities, forge, h)
             }
             (EntityIndex::Torpedo(idx_tor), EntityIndex::Triship(idx_tri))
             | (EntityIndex::Triship(idx_tri), EntityIndex::Torpedo(idx_tor)) => {
-                handle_triship_torpedo(idx_tri, idx_tor, entities, dead, forge, h)
+                handle_triship_torpedo(idx_tri, idx_tor, entities, forge, h)
             }
             (EntityIndex::Torpedo(idx_tor), EntityIndex::Projectile(idx_pro))
             | (EntityIndex::Projectile(idx_pro), EntityIndex::Torpedo(idx_tor)) => {
-                handle_projectile_torpedo(idx_pro, idx_tor, entities, dead, forge, h)
+                handle_projectile_torpedo(idx_pro, idx_tor, entities, forge, h)
             }
             (EntityIndex::Torpedo(idx1), EntityIndex::Torpedo(idx2)) => {
-                handle_torpedo_torpedo(idx1, idx2, entities, dead, forge, h)
+                handle_torpedo_torpedo(idx1, idx2, entities, forge, h)
             }
             _ => (),
         }
@@ -47,14 +44,13 @@ pub fn update_collision_reaction(
         idx1: usize,
         idx2: usize,
         entities: &mut Entities,
-        dead: &mut BTreeSet<usize>,
         forge: &Forge,
         h: &mut RaylibHandle,
     ) {
         for t in [idx1, idx2] {
-            let t = &entities.torpedoes[t];
+            let t = &mut entities.torpedoes[t];
 
-            dead.insert(t.id);
+            t.entity.life = 0.0;
 
             let c = t.entity.body.state.new.shape.centroid();
 
@@ -69,15 +65,14 @@ pub fn update_collision_reaction(
         idx_p: usize,
         idx_t: usize,
         entities: &mut Entities,
-        dead: &mut BTreeSet<usize>,
         forge: &Forge,
         h: &mut RaylibHandle,
     ) {
-        let p = &entities.projectiles[idx_p];
-        let t = &entities.torpedoes[idx_t];
+        let p = &mut entities.projectiles[idx_p];
+        let t = &mut entities.torpedoes[idx_t];
 
-        dead.insert(p.id);
-        dead.insert(t.id);
+        p.entity.life = 0.0;
+        t.entity.life = 0.0;
 
         let c = t.entity.body.state.new.shape.centroid();
 
@@ -91,16 +86,14 @@ pub fn update_collision_reaction(
         idx_tri: usize,
         idx_tor: usize,
         entities: &mut Entities,
-        dead: &mut BTreeSet<usize>,
         forge: &Forge,
         h: &mut RaylibHandle,
     ) {
         let tri = &mut entities.triships[idx_tri];
-        let tor = &entities.torpedoes[idx_tor];
+        let tor = &mut entities.torpedoes[idx_tor];
 
         tri.entity.life -= tor.entity.damage;
-
-        dead.insert(tor.id);
+        tor.entity.life = 0.0;
 
         let c = tor.entity.body.state.new.shape.centroid();
 
@@ -116,16 +109,14 @@ pub fn update_collision_reaction(
         idx_t: usize,
         idx_p: usize,
         entities: &mut Entities,
-        dead: &mut BTreeSet<usize>,
         forge: &Forge,
         h: &mut RaylibHandle,
     ) {
         let t = &mut entities.triships[idx_t];
-        let p = &entities.projectiles[idx_p];
+        let p = &mut entities.projectiles[idx_p];
 
         t.entity.life -= p.entity.damage;
-
-        dead.insert(p.id);
+        p.entity.life = 0.0;
 
         // spawn explosion!
         for explosion in forge.explosion_projectile(p.entity.body.polygon.vertexes.new[1], h) {
@@ -149,15 +140,14 @@ pub fn update_collision_reaction(
         idx1: usize,
         idx2: usize,
         entities: &mut Entities,
-        dead: &mut BTreeSet<usize>,
         forge: &Forge,
         h: &mut RaylibHandle,
     ) {
-        let p1 = &entities.projectiles[idx1];
-        let p2 = &entities.projectiles[idx2];
+        let p2 = &mut entities.projectiles[idx2];
+        p2.entity.life = 0.0;
 
-        dead.insert(p1.id);
-        dead.insert(p2.id);
+        let p1 = &mut entities.projectiles[idx1];
+        p1.entity.life = 0.0;
 
         // spawn explosion!
         for explosion in forge.explosion_projectile(p1.entity.body.polygon.vertexes.new[1], h) {
@@ -340,11 +330,11 @@ pub fn update_collision_detection(
                                     EntityIndex::Projectile(_) | EntityIndex::Torpedo(_),
                                     EntityIndex::Triship(_),
                                 ) => {
-                                    // reposition(
-                                    //     eidx1,
-                                    //     dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
-                                    //     entities,
-                                    // );
+                                    reposition(
+                                        eidx1,
+                                        dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
+                                        entities,
+                                    );
                                 }
                                 (EntityIndex::Torpedo(_), EntityIndex::Torpedo(_)) => {
                                     reposition(

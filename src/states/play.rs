@@ -63,6 +63,7 @@ enum Action {
     ToggleInterpolation,
     ToggleDebug,
     TogglePause,
+    SpawnTriship(i32, i32),
 }
 
 impl Play {
@@ -188,6 +189,12 @@ impl Play {
             self.actions.insert(Action::TogglePause);
         }
 
+        if h.is_key_pressed(KeyboardKey::KEY_F4) {
+            let pos = h.get_screen_to_world2D(h.get_mouse_position(), self.camera);
+            self.actions
+                .insert(Action::SpawnTriship(pos.x as i32, pos.y as i32));
+        }
+
         // gameplay
         if h.is_key_down(KeyboardKey::KEY_LEFT) {
             self.actions.insert(Action::Command(Command::RotateLeft));
@@ -281,6 +288,18 @@ impl Play {
 
         self.draw_hud(r, delta);
 
+        if self.debug {
+            let mouse_screen = r.get_mouse_position();
+            let mouse_world = r.get_screen_to_world2D(mouse_screen, self.camera);
+            r.draw_text(
+                &format!("{}, {}", mouse_world.x, mouse_world.y),
+                mouse_screen.x as i32 + 5,
+                mouse_screen.y as i32 - 12,
+                10,
+                DEBUG_COLOR,
+            );
+        }
+
         r.draw_text(&format!("tick {}", self.tick), 3, 22, 10, DEBUG_COLOR);
         r.draw_text(
             &format!("ents {}", self.entities.total()),
@@ -314,7 +333,7 @@ impl Play {
                         tick_commands.commands.len() == self.player_data.entity_ids.len();
                 }
                 NetMessage::TogglePause(_cid) => {
-                    // TODO: might be interesting to display toggled pause
+                    // TODO: might be interesting to display who toggled pause
                     self.paused = !self.paused;
                 }
                 _ => return,
@@ -324,6 +343,14 @@ impl Play {
                     if self.player_data.entity_ids.contains(eid) {
                         // player has been killed, start a respwan timer
                         self.player_data.respawn_timers.push((*eid, RESPAWN_TIMER));
+
+                        // if we have died, let's set the camera target to the latest known position
+                        if self.player_data.player_entity_id == *eid {
+                            self.camera_target = Generation {
+                                old: self.camera_target.new,
+                                new: self.camera_target.new,
+                            };
+                        }
                     }
                 }
                 _ => return,
@@ -367,7 +394,7 @@ impl Play {
 
                     // create the players in the cosmos and set the player data
                     for client_id in cids.iter() {
-                        let entity = Entity::Triship(self.forge.triship());
+                        let entity = Entity::Triship(self.forge.triship(Vector2::new(25.0, 25.0)));
                         let eid = self.entities.add(entity);
 
                         self.player_data.entity_ids.push(eid);
@@ -398,6 +425,11 @@ impl Play {
                 Action::TogglePause => {
                     bus.send(NetRequestMessage::TogglePause);
                 }
+                Action::SpawnTriship(x, y) => {
+                    let entity =
+                        Entity::Triship(self.forge.triship(Vector2::new(x as f32, y as f32)));
+                    self.entities.add(entity);
+                }
             }
         }
     }
@@ -410,7 +442,7 @@ impl Play {
                 return true;
             }
 
-            let entity = self.forge.triship();
+            let entity = self.forge.triship(Vector2::new(25.0, 25.0));
             let new_eid = self.entities.add(Entity::Triship(entity));
 
             if self.player_data.player_entity_id == *eid {

@@ -15,13 +15,20 @@ impl Forge {
         Self {}
     }
 
-    pub fn triship(&self) -> Triship {
+    pub fn triship(&self, position: Vector2) -> Triship {
         let d = Direction::SOUTHEAST;
+        let w = 60.0;
+        let w3 = w / 3.0;
+        let h = 75.0;
+        let h3 = h / 3.0;
         let s = RotatedShape {
             shape: Triangle {
-                v1: Vector2::new(50.0, 50.0),
-                v2: Vector2::new(110.0, 75.0),
-                v3: Vector2::new(50.0, 100.0),
+                // v1: Vector2::new(50.0, 50.0),
+                // v2: Vector2::new(110.0, 75.0),
+                // v3: Vector2::new(50.0, 100.0),
+                v1: Vector2::new(position.x - w3, position.y - h3),
+                v2: Vector2::new(position.x + w3 * 2.0, position.y),
+                v3: Vector2::new(position.x - w3, position.y + h3),
             },
             rotation: d,
         };
@@ -132,6 +139,7 @@ impl Forge {
                 rotation_speed_max: 0.0,
             },
             owner_id,
+            life: 1.0,
         }
     }
 
@@ -162,7 +170,7 @@ impl Forge {
             new: v,
         };
         let b_gen = Generation { old: b, new: b };
-        let speed = 10.0;
+        let speed = 8.0;
 
         // we want the torp to be launched sideways,
         // then once the timer_inactive is 0 it will start
@@ -183,14 +191,15 @@ impl Forge {
             },
             motion: Motion {
                 velocity: initial_velocity + direction * speed,
-                acceleration: 1.1,
+                acceleration: 1.16,
                 speed_max: 30.0,
                 rotation_speed: 0.0,
                 rotation_acceleration: 0.0,
                 rotation_speed_max: 0.0,
             },
             owner_id,
-            timer_inactive: 2,
+            timer_inactive: 3,
+            life: 1.0,
         }
     }
 
@@ -252,13 +261,8 @@ impl Forge {
             let y = h.get_random_value::<i32>(-200..200) as f32 / 100.0;
             let velocity = Vector2::new(x, y);
             let acceleration = h.get_random_value::<i32>(1..10) as f32;
-            let color = Color::new(
-                h.get_random_value::<i32>(200..255) as u8,
-                h.get_random_value::<i32>(0..10) as u8,
-                h.get_random_value::<i32>(0..10) as u8,
-                h.get_random_value::<i32>(200..255) as u8,
-            );
-            let random = h.get_random_value::<i32>(1..15) as u8;
+            let color = explosion_color(h);
+            let random = h.get_random_value::<i32>(1..10) as u8;
 
             explosion.push(self.explosion(
                 position,
@@ -286,12 +290,7 @@ impl Forge {
             let y = h.get_random_value::<i32>(-200..200) as f32 / 100.0;
             let velocity = Vector2::new(x, y);
             let acceleration = h.get_random_value::<i32>(1..10) as f32;
-            let color = Color::new(
-                h.get_random_value::<i32>(200..255) as u8,
-                h.get_random_value::<i32>(0..10) as u8,
-                h.get_random_value::<i32>(0..10) as u8,
-                h.get_random_value::<i32>(200..255) as u8,
-            );
+            let color = explosion_color(h);
             let random = h.get_random_value::<i32>(1..15) as u8;
 
             explosion.push(self.explosion(
@@ -320,12 +319,7 @@ impl Forge {
             let y = h.get_random_value::<i32>(-3000..3000) as f32 / 1000.0;
             let velocity = Vector2::new(x, y);
             let acceleration = h.get_random_value::<i32>(1..2000) as f32 / 100.0;
-            let color = Color::new(
-                h.get_random_value::<i32>(200..255) as u8,
-                h.get_random_value::<i32>(0..10) as u8,
-                h.get_random_value::<i32>(0..10) as u8,
-                h.get_random_value::<i32>(200..255) as u8,
-            );
+            let color = explosion_color(h);
             let random = h.get_random_value::<i32>(1..15) as u8;
 
             explosion.push(self.explosion(
@@ -349,6 +343,7 @@ impl Forge {
         lifetime: u8,
         velocity: Vector2,
         acceleration: f32,
+        random: u8,
     ) -> Particle {
         let s = RotatedShape {
             shape: position,
@@ -364,7 +359,7 @@ impl Forge {
 
         Particle {
             lifetime,
-            random: 0,
+            random,
             body: Body {
                 state: Generation { old: s, new: s },
                 color: Color::LIGHTSKYBLUE,
@@ -428,16 +423,13 @@ impl Forge {
                 .add(position);
 
                 // some random values to make it look awesome
-                let lifetime = (h.get_random_value::<i32>(0..4) + j) as u8;
+                let lifetime = (h.get_random_value::<i32>(0..2) + j) as u8;
                 let speed = h.get_random_value::<i32>(2..10) as f32;
                 let velocity = initial_velocity + rotation * speed;
                 let acceleration = h.get_random_value::<i32>(1..4) as f32;
-                // let velocity = velocity.clamp(-20.0..20.0);
-                // println!("{:?}", velocity);
+                let random = h.get_random_value::<i32>(10..20) as u8;
 
-                // clamp shit!? once ship is heading in a straight line, the afterburner gets smaller
-
-                exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration));
+                exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration, random));
             }
         }
 
@@ -477,8 +469,9 @@ impl Forge {
                 let speed = h.get_random_value::<i32>(1..6) as f32;
                 let velocity = initial_velocity + rotation * speed;
                 let acceleration = h.get_random_value::<i32>(1..4) as f32;
+                let random = h.get_random_value::<i32>(10..20) as u8;
 
-                exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration));
+                exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration, random));
             }
         }
 
@@ -514,12 +507,13 @@ impl Forge {
                 .add(position);
 
                 // some random values to make it look awesome
-                let lifetime = (h.get_random_value::<i32>(0..4) + j) as u8;
-                let speed = h.get_random_value::<i32>(1..6) as f32;
+                let lifetime = (h.get_random_value::<i32>(0..2) + j) as u8;
+                let speed = h.get_random_value::<i32>(1..8) as f32;
                 let velocity = initial_velocity + rotation * speed;
                 let acceleration = h.get_random_value::<i32>(1..4) as f32;
+                let random = h.get_random_value::<i32>(10..20) as u8;
 
-                exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration));
+                exhaust.push(self.exhaust(pos, rotation, lifetime, velocity, acceleration, random));
             }
         }
 
@@ -638,5 +632,14 @@ impl Forge {
         }
 
         stars
+    }
+}
+
+fn explosion_color(h: &mut RaylibHandle) -> Color {
+    Color {
+        r: h.get_random_value::<i32>(250..255) as u8,
+        g: h.get_random_value::<i32>(0..8) as u8,
+        b: h.get_random_value::<i32>(0..0) as u8,
+        a: h.get_random_value::<i32>(100..200) as u8,
     }
 }

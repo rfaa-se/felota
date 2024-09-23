@@ -341,8 +341,8 @@ fn handle_torpedo(entities: &mut Entities, eidx: EntityIndex, id: usize, forge: 
     let rotation = body.state.new.rotation;
     let vertexes = &body.polygon.vertexes.new;
     let position = Vector2::new(
-        vertexes[0].x * 0.25 + vertexes[1].x * 0.75,
-        vertexes[0].y * 0.25 + vertexes[1].y * 0.75,
+        vertexes[0].x * 0.4 + vertexes[1].x * 0.6,
+        vertexes[0].y * 0.4 + vertexes[1].y * 0.6,
     );
     let torpedo = forge.torpedo(position, rotation, velocity, id);
 

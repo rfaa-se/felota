@@ -260,6 +260,8 @@ fn draw_triships(
             continue;
         }
 
+        r.draw_pixel_v(ori, Color::BLUE);
+
         let deg = gen.new.rotation.y.atan2(gen.new.rotation.x).to_degrees();
         r.draw_text_ex(
             r.get_font_default(),

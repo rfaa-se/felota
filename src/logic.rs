@@ -53,7 +53,8 @@ impl Logic {
         update_motion(entities);
         update_body(entities);
         update_collision_detection(entities, &mut self.quadtree, &mut self.collisions);
-        update_collision_reaction(entities, &mut self.collisions, &mut self.dead, forge, h);
+        update_collision_reaction(entities, &mut self.collisions, forge, h);
+        update_particles_exhaust_alpha(entities);
         update_particles_lifetime(entities, &mut self.dead);
         update_particles_explosions(entities);
         update_particles_stars(entities);
@@ -88,9 +89,19 @@ fn update_torpedo_timers(entities: &mut Entities) {
 }
 
 fn update_commands_accelerate(entities: &mut Entities, commands: &mut Vec<(usize, Command)>) {
-    entities.torpedoes.iter().map(|x| x.id).for_each(|x| {
-        commands.push((x, Command::Accelerate));
-    });
+    entities
+        .torpedoes
+        .iter()
+        .filter_map(|x| {
+            if x.entity.life > 0.0 {
+                Some(x.id)
+            } else {
+                None
+            }
+        })
+        .for_each(|x| {
+            commands.push((x, Command::Accelerate));
+        });
 }
 
 fn update_cooldowns(entities: &mut Entities) {
@@ -200,8 +211,10 @@ fn update_dead_notify(entities: &mut Entities, dead: &BTreeSet<usize>, bus: &mut
 fn update_dead_detection(entities: &mut Entities, dead: &mut BTreeSet<usize>) {
     entities
         .triships
-        .iter_mut()
+        .iter()
         .map(|x| (x.id, x.entity.life))
+        .chain(entities.projectiles.iter().map(|x| (x.id, x.entity.life)))
+        .chain(entities.torpedoes.iter().map(|x| (x.id, x.entity.life)))
         .filter_map(|(id, life)| if life <= 0.0 { Some(id) } else { None })
         .for_each(|id| {
             dead.insert(id);
@@ -238,6 +251,19 @@ fn update_boost(entities: &mut Entities) {
                 motion.acceleration = boost.acceleration_old;
             }
         });
+}
+
+fn update_particles_exhaust_alpha(entities: &mut Entities) {
+    entities.exhausts.iter_mut().for_each(|x| {
+        let c = &mut x.entity.body.color;
+        let r = x.entity.random;
+
+        if c.a > 0 + r {
+            c.a -= r;
+        } else {
+            c.a = 0;
+        }
+    });
 }
 
 fn update_particles_lifetime(entities: &mut Entities, dead: &mut BTreeSet<usize>) {

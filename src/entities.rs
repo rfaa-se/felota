@@ -53,6 +53,7 @@ pub struct Projectile {
     pub body: Body<Rectangle>,
     pub motion: Motion,
     pub owner_id: usize,
+    pub life: f32,
 }
 
 pub struct Torpedo {
@@ -61,6 +62,7 @@ pub struct Torpedo {
     pub motion: Motion,
     pub owner_id: usize,
     pub timer_inactive: u8,
+    pub life: f32,
 }
 
 pub struct Particle {
