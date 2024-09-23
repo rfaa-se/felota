@@ -162,12 +162,14 @@ pub fn update_collision_reaction(
         h: &mut RaylibHandle,
     ) {
         let t = &entities.triships[idx];
-        if t.entity.life <= 0.0 {
-            let c = t.entity.body.state.new.shape.centroid();
+        if t.entity.life > 0.0 {
+            return;
+        }
 
-            for explosion in forge.explosion_triship(c, h) {
-                entities.add(Entity::Explosion(explosion));
-            }
+        let c = t.entity.body.state.new.shape.centroid();
+
+        for explosion in forge.explosion_triship(c, h) {
+            entities.add(Entity::Explosion(explosion));
         }
     }
 }
@@ -309,7 +311,7 @@ pub fn update_collision_detection(
                                     //     dir1 * -1.0 * speed_max1 + dir1 * speed_cur1,
                                     //     entities,
                                     // );
-                                    //
+
                                     // reposition(
                                     //     eidx2,
                                     //     dir2 * -1.0 * speed_max2 + dir2 * speed_cur2,

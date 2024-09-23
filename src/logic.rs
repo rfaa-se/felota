@@ -89,6 +89,7 @@ fn update_torpedo_timers(entities: &mut Entities) {
 }
 
 fn update_commands_accelerate(entities: &mut Entities, commands: &mut Vec<(usize, Command)>) {
+    // TODO: should this be some kind of torpedo AI instead?
     entities
         .torpedoes
         .iter()
