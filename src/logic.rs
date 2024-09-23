@@ -259,7 +259,7 @@ fn update_particles_exhaust_alpha(entities: &mut Entities) {
         let c = &mut x.entity.body.color;
         let r = x.entity.random;
 
-        if c.a > 0 + r {
+        if c.a >= r {
             c.a -= r;
         } else {
             c.a = 0;
