@@ -19,6 +19,12 @@ pub enum Command {
     Projectile,
     Boost,
     Torpedo,
+    Spawn(Spawn),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Spawn {
+    Triship(i32, i32),
 }
 
 enum Exhaust {
@@ -26,15 +32,16 @@ enum Exhaust {
     Torpedo,
 }
 
-const ACCELERATE: u8 = 1;
-const DECELERATE: u8 = 2;
-const ROTATE_LEFT: u8 = 3;
-const ROTATE_RIGHT: u8 = 4;
-const PROJECTILE: u8 = 5;
-const BOOST: u8 = 6;
-const TORPEDO: u8 = 7;
-
 impl Command {
+    const ACCELERATE: u8 = 1;
+    const DECELERATE: u8 = 2;
+    const ROTATE_LEFT: u8 = 3;
+    const ROTATE_RIGHT: u8 = 4;
+    const PROJECTILE: u8 = 5;
+    const BOOST: u8 = 6;
+    const TORPEDO: u8 = 7;
+    const SPAWN: u8 = 8;
+
     pub fn execute(
         &self,
         entities: &mut Entities,
@@ -54,22 +61,24 @@ impl Command {
             Command::Projectile => handle_projectile(entities, eidx, eid, forge),
             Command::Boost => handle_boost(entities, eidx),
             Command::Torpedo => handle_torpedo(entities, eidx, eid, forge),
+            Command::Spawn(spawn) => handle_spawn(entities, forge, spawn),
         }
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let Some((ctype, _data)) = bytes.split_first() else {
+        let Some((ctype, data)) = bytes.split_first() else {
             panic!("wtf cmd");
         };
 
         match *ctype {
-            ACCELERATE => Command::Accelerate,
-            DECELERATE => Command::Decelerate,
-            ROTATE_LEFT => Command::RotateLeft,
-            ROTATE_RIGHT => Command::RotateRight,
-            PROJECTILE => Command::Projectile,
-            BOOST => Command::Boost,
-            TORPEDO => Command::Torpedo,
+            Self::ACCELERATE => Command::Accelerate,
+            Self::DECELERATE => Command::Decelerate,
+            Self::ROTATE_LEFT => Command::RotateLeft,
+            Self::ROTATE_RIGHT => Command::RotateRight,
+            Self::PROJECTILE => Command::Projectile,
+            Self::BOOST => Command::Boost,
+            Self::TORPEDO => Command::Torpedo,
+            Self::SPAWN => Command::Spawn(Spawn::from_bytes(&data[1..])),
             _ => panic!("wtf ctype {}", ctype),
         }
     }
@@ -77,25 +86,84 @@ impl Command {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut bytes = Vec::new();
 
-        // for now all commands are 1 in length
-        let len = match self {
-            _ => 1,
-        };
-
-        bytes.push(len);
+        bytes.push(self.len());
 
         match self {
-            Command::Accelerate => bytes.push(ACCELERATE),
-            Command::Decelerate => bytes.push(DECELERATE),
-            Command::RotateLeft => bytes.push(ROTATE_LEFT),
-            Command::RotateRight => bytes.push(ROTATE_RIGHT),
-            Command::Projectile => bytes.push(PROJECTILE),
-            Command::Boost => bytes.push(BOOST),
-            Command::Torpedo => bytes.push(TORPEDO),
+            Command::Accelerate => bytes.push(Self::ACCELERATE),
+            Command::Decelerate => bytes.push(Self::DECELERATE),
+            Command::RotateLeft => bytes.push(Self::ROTATE_LEFT),
+            Command::RotateRight => bytes.push(Self::ROTATE_RIGHT),
+            Command::Projectile => bytes.push(Self::PROJECTILE),
+            Command::Boost => bytes.push(Self::BOOST),
+            Command::Torpedo => bytes.push(Self::TORPEDO),
+            Command::Spawn(spawn) => {
+                bytes.push(Self::SPAWN);
+                bytes.extend_from_slice(&spawn.to_bytes().into_vec());
+            }
         }
 
         bytes.into_boxed_slice()
     }
+
+    pub fn len(&self) -> u8 {
+        // type identifier + potential data length in command
+        1 + match self {
+            Command::Spawn(spawn) => spawn.len(),
+            _ => 0,
+        }
+    }
+}
+
+impl Spawn {
+    const TRISHIP: u8 = 1;
+
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let Some((stype, data)) = bytes.split_first() else {
+            panic!("wtf spawn");
+        };
+
+        match *stype {
+            Self::TRISHIP => {
+                let (x, y) = data.split_at(4);
+                let x = i32::from_be_bytes(x.try_into().expect("wtf spawn x"));
+                let y = i32::from_be_bytes(y.try_into().expect("wtf spawn y"));
+
+                Spawn::Triship(x, y)
+            }
+            _ => panic!("wtf stype {}", stype),
+        }
+    }
+
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut bytes = Vec::new();
+
+        bytes.push(self.len());
+
+        match self {
+            Spawn::Triship(x, y) => {
+                bytes.push(Self::TRISHIP);
+                bytes.extend_from_slice(&x.to_be_bytes());
+                bytes.extend_from_slice(&y.to_be_bytes());
+            }
+        }
+
+        bytes.into_boxed_slice()
+    }
+
+    pub fn len(&self) -> u8 {
+        1 + 1 // length itself + type identifier + potential data length in spawn
+            + match self {
+                Spawn::Triship(_, _) => 4 + 4,
+            }
+    }
+}
+
+fn handle_spawn(entities: &mut Entities, forge: &Forge, spawn: &Spawn) {
+    let entity = match spawn {
+        Spawn::Triship(x, y) => Entity::Triship(forge.triship(Vector2::new(*x as f32, *y as f32))),
+    };
+
+    entities.add(entity);
 }
 
 fn handle_accelerate(
@@ -111,6 +179,10 @@ fn handle_accelerate(
         }
         EntityIndex::Torpedo(idx) => {
             let e = &mut entities.torpedoes[idx].entity;
+            (e.body.state.new.rotation, &mut e.motion)
+        }
+        EntityIndex::Projectile(idx) => {
+            let e = &mut entities.projectiles[idx].entity;
             (e.body.state.new.rotation, &mut e.motion)
         }
         _ => panic!("wtf accelerate {:?}", eidx),

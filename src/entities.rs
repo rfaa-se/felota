@@ -154,28 +154,6 @@ impl Entities {
             }
         }
     }
-
-    pub fn centroid(&self, id: usize) -> Option<Generation<Vector2>> {
-        let Some(eidx) = self.entity(id) else {
-            return None;
-        };
-
-        let (old, new) = match eidx {
-            EntityIndex::Triship(idx) => {
-                let gen = &self.triships[idx].entity.body.state;
-                (
-                    &gen.old.shape as &dyn Centroidable,
-                    &gen.new.shape as &dyn Centroidable,
-                )
-            }
-            _ => return None,
-        };
-
-        Some(Generation {
-            old: old.centroid(),
-            new: new.centroid(),
-        })
-    }
 }
 
 fn swap_dead<T>(

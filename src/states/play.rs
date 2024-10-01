@@ -4,8 +4,8 @@ use raylib::prelude::*;
 
 use crate::{
     bus::Bus,
-    commands::{Command, EntityCommands},
-    components::Generation,
+    commands::{Command, EntityCommands, Spawn},
+    components::{Centroidable, Generation},
     constants::{
         DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH, RESPAWN_TIMER,
         TICK_SCHEDULED,
@@ -51,9 +51,18 @@ struct NetworkData {
 
 struct PlayerData {
     player_entity_id: usize,
+    hud_data: HudData,
     entity_ids: Vec<usize>,
     map: HashMap<u32, usize>,
     respawn_timers: Vec<(usize, u8)>,
+}
+
+struct HudData {
+    life: f32,
+    speed: f32,
+    boost_active: u8,
+    boost_cooldown: u8,
+    torpedo_cooldown: u8,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -63,7 +72,6 @@ enum Action {
     ToggleInterpolation,
     ToggleDebug,
     TogglePause,
-    SpawnTriship(i32, i32),
 }
 
 impl Play {
@@ -81,6 +89,13 @@ impl Play {
             },
             player_data: PlayerData {
                 player_entity_id: 0,
+                hud_data: HudData {
+                    life: 0.0,
+                    speed: 0.0,
+                    boost_active: 0,
+                    boost_cooldown: 0,
+                    torpedo_cooldown: 0,
+                },
                 entity_ids: Vec::new(),
                 map: HashMap::new(),
                 respawn_timers: Vec::new(),
@@ -146,14 +161,8 @@ impl Play {
             h,
         );
 
-        self.update_respawns();
-
-        // the player centroid is used to set the camera target,
-        // we want the player entity to be positioned in the middle of the screen,
-        // this is why the camera is created with an offset and we only update the target
-        if let Some(centroid) = self.entities.centroid(self.player_data.player_entity_id) {
-            self.camera_target = centroid;
-        }
+        self.update_player_respawns();
+        self.update_player_data();
 
         let mut q = Vec::new();
         while let Some(c) = self.command_queue.pop_first() {
@@ -191,10 +200,15 @@ impl Play {
 
         if h.is_key_pressed(KeyboardKey::KEY_F4) {
             let pos = h.get_screen_to_world2D(h.get_mouse_position(), self.camera);
+
             self.actions
-                .insert(Action::SpawnTriship(pos.x as i32, pos.y as i32));
+                .insert(Action::Command(Command::Spawn(Spawn::Triship(
+                    pos.x as i32,
+                    pos.y as i32,
+                ))));
         }
 
+        // TODO: we want these bindings to be configurable.. in the future :)
         // gameplay
         if h.is_key_down(KeyboardKey::KEY_LEFT) {
             self.actions.insert(Action::Command(Command::RotateLeft));
@@ -344,12 +358,9 @@ impl Play {
                         // player has been killed, start a respwan timer
                         self.player_data.respawn_timers.push((*eid, RESPAWN_TIMER));
 
-                        // if we have died, let's set the camera target to the latest known position
+                        // if we have died, let's reset the player data
                         if self.player_data.player_entity_id == *eid {
-                            self.camera_target = Generation {
-                                old: self.camera_target.new,
-                                new: self.camera_target.new,
-                            };
+                            self.reset_player_data();
                         }
                     }
                 }
@@ -365,12 +376,47 @@ impl Play {
     }
 
     fn draw_hud(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, _delta: f32) {
+        let hud_start_y = RENDER_HEIGHT - HUD_HEIGHT;
+
         r.draw_line(
             0,
-            RENDER_HEIGHT - HUD_HEIGHT,
+            hud_start_y,
             RENDER_WIDTH,
             RENDER_HEIGHT - HUD_HEIGHT,
             HUD_BACKGROUND_COLOR,
+        );
+
+        let data = &self.player_data.hud_data;
+        r.draw_text(
+            &format!("life {:.2}", data.life),
+            10,
+            hud_start_y + 10,
+            10,
+            DEBUG_COLOR,
+        );
+
+        r.draw_text(
+            &format!("speed {:.2}", data.speed),
+            10,
+            hud_start_y + 20,
+            10,
+            DEBUG_COLOR,
+        );
+
+        r.draw_text(
+            &format!("boost {} {}", data.boost_active, data.boost_cooldown),
+            10,
+            hud_start_y + 30,
+            10,
+            DEBUG_COLOR,
+        );
+
+        r.draw_text(
+            &format!("torpedo {}", data.torpedo_cooldown),
+            10,
+            hud_start_y + 40,
+            10,
+            DEBUG_COLOR,
         );
     }
 
@@ -425,16 +471,11 @@ impl Play {
                 Action::TogglePause => {
                     bus.send(NetRequestMessage::TogglePause);
                 }
-                Action::SpawnTriship(x, y) => {
-                    let entity =
-                        Entity::Triship(self.forge.triship(Vector2::new(x as f32, y as f32)));
-                    self.entities.add(entity);
-                }
             }
         }
     }
 
-    fn update_respawns(&mut self) {
+    fn update_player_respawns(&mut self) {
         self.player_data.respawn_timers.retain_mut(|(eid, timer)| {
             *timer -= 1;
 
@@ -460,5 +501,51 @@ impl Play {
 
             false
         });
+    }
+
+    fn update_player_data(&mut self) {
+        let Some(eidx) = self.entities.entity(self.player_data.player_entity_id) else {
+            return;
+        };
+
+        let e = match eidx {
+            EntityIndex::Triship(idx) => &self.entities.triships[idx].entity,
+            _ => return,
+        };
+
+        // the player centroid is used to set the camera target,
+        // we want the player entity to be positioned in the middle of the screen,
+        // this is why the camera is created with an offset and we only update the target
+        self.camera_target.old = e.body.state.old.shape.centroid();
+        self.camera_target.new = e.body.state.new.shape.centroid();
+
+        let hud = &mut self.player_data.hud_data;
+
+        hud.life = e.life;
+        hud.speed = e.motion.velocity.length();
+        hud.boost_active = if e.boost.active {
+            e.boost.lifetime.current
+        } else {
+            0
+        };
+        hud.boost_cooldown = if e.boost.active {
+            e.boost.cooldown.current
+        } else {
+            0
+        };
+        hud.torpedo_cooldown = e.cooldown_torpedo.current;
+    }
+
+    fn reset_player_data(&mut self) {
+        // set the camera target to the latest known position
+        self.camera_target = Generation {
+            old: self.camera_target.new,
+            new: self.camera_target.new,
+        };
+
+        self.player_data.hud_data.life = 0.0;
+        self.player_data.hud_data.speed = 0.0;
+        self.player_data.hud_data.boost_cooldown = 0;
+        self.player_data.hud_data.torpedo_cooldown = 0;
     }
 }

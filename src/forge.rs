@@ -132,7 +132,7 @@ impl Forge {
             },
             motion: Motion {
                 velocity: initial_velocity + direction * speed,
-                acceleration: 1.0,
+                acceleration: 1.1,
                 speed_max: 30.0,
                 rotation_speed: 0.0,
                 rotation_acceleration: 0.0,

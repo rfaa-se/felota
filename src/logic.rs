@@ -89,17 +89,12 @@ fn update_torpedo_timers(entities: &mut Entities) {
 }
 
 fn update_commands_accelerate(entities: &mut Entities, commands: &mut Vec<(usize, Command)>) {
-    // TODO: should this be some kind of torpedo AI instead?
     entities
         .torpedoes
         .iter()
-        .filter_map(|x| {
-            if x.entity.life > 0.0 {
-                Some(x.id)
-            } else {
-                None
-            }
-        })
+        .map(|x| (x.id, x.entity.life))
+        .chain(entities.projectiles.iter().map(|x| (x.id, x.entity.life)))
+        .filter_map(|(id, life)| if life > 0.0 { Some(id) } else { None })
         .for_each(|x| {
             commands.push((x, Command::Accelerate));
         });
@@ -109,13 +104,8 @@ fn update_cooldowns(entities: &mut Entities) {
     entities
         .triships
         .iter_mut()
-        .filter_map(|x| {
-            if x.entity.cooldown_torpedo.current != 0 {
-                Some(&mut x.entity.cooldown_torpedo.current)
-            } else {
-                None
-            }
-        })
+        .map(|x| &mut x.entity.cooldown_torpedo.current)
+        .filter(|x| **x != 0)
         .for_each(|x| *x -= 1);
 }
 
