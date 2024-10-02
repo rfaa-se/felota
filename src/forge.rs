@@ -54,7 +54,7 @@ impl Forge {
             },
             motion: Motion {
                 velocity: Vector2::zero(),
-                speed_max: 18.0,
+                speed_max: 20.0,
                 acceleration: 1.02,
                 rotation_speed: 0.0,
                 rotation_acceleration: 0.016,
@@ -77,7 +77,7 @@ impl Forge {
             },
             cooldown_torpedo: Load {
                 current: 0,
-                max: 25,
+                max: 20,
             },
         }
     }

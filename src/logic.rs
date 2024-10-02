@@ -366,7 +366,7 @@ fn update_motion(entities: &mut Entities) {
             entities
                 .torpedoes
                 .iter_mut()
-                .map(|x| (&mut x.entity.motion, false)),
+                .map(|x| (&mut x.entity.motion, true)),
         )
         .for_each(|(motion, apply_drag)| {
             if apply_drag {
@@ -378,13 +378,13 @@ fn update_motion(entities: &mut Entities) {
         });
 
     fn apply_cosmic_drag(motion: &mut Motion) {
-        let norm = motion.velocity.normalized();
-        let drag = norm * COSMIC_DRAG;
+        let direction = motion.velocity.normalized();
+        let drag = direction * COSMIC_DRAG;
 
         motion.velocity -= drag;
 
         // if entity has suddenly switched direction after the drag, we should make a full stop
-        if norm.dot(motion.velocity.normalized()) < 0.0 {
+        if direction.dot(motion.velocity.normalized()) < 0.0 {
             motion.velocity = Vector2::zero();
         }
 

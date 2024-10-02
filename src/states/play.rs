@@ -7,8 +7,8 @@ use crate::{
     commands::{Command, EntityCommands, Spawn},
     components::{Centroidable, Generation},
     constants::{
-        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH, RESPAWN_TIMER,
-        TICK_SCHEDULED,
+        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, HUD_SEPARATOR_COLOR, RENDER_HEIGHT,
+        RENDER_WIDTH, RESPAWN_TIMER, TICK_SCHEDULED,
     },
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
@@ -376,45 +376,44 @@ impl Play {
     }
 
     fn draw_hud(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, _delta: f32) {
-        let hud_start_y = RENDER_HEIGHT - HUD_HEIGHT;
+        let hud_y = RENDER_HEIGHT - HUD_HEIGHT;
 
-        r.draw_line(
-            0,
-            hud_start_y,
-            RENDER_WIDTH,
-            RENDER_HEIGHT - HUD_HEIGHT,
-            HUD_BACKGROUND_COLOR,
-        );
+        r.draw_rectangle(0, hud_y, RENDER_WIDTH, HUD_HEIGHT, HUD_BACKGROUND_COLOR);
+        r.draw_line(0, hud_y, RENDER_WIDTH, hud_y, HUD_SEPARATOR_COLOR);
 
         let data = &self.player_data.hud_data;
+        r.draw_text("LIFE", 10, hud_y + 10, 10, DEBUG_COLOR);
         r.draw_text(
-            &format!("life {:.2}", data.life),
-            10,
-            hud_start_y + 10,
+            &format!("{:.2}", data.life),
+            40,
+            hud_y + 10,
             10,
             DEBUG_COLOR,
         );
 
+        r.draw_text("SPD", 10, hud_y + 20, 10, DEBUG_COLOR);
         r.draw_text(
-            &format!("speed {:.2}", data.speed),
-            10,
-            hud_start_y + 20,
+            &format!("{:.2}", data.speed),
+            40,
+            hud_y + 20,
             10,
             DEBUG_COLOR,
         );
 
+        r.draw_text("BST", 10, hud_y + 30, 10, DEBUG_COLOR);
         r.draw_text(
-            &format!("boost {} {}", data.boost_active, data.boost_cooldown),
-            10,
-            hud_start_y + 30,
+            &format!("{} {}", data.boost_active, data.boost_cooldown),
+            40,
+            hud_y + 30,
             10,
             DEBUG_COLOR,
         );
 
+        r.draw_text("TRP", 10, hud_y + 40, 10, DEBUG_COLOR);
         r.draw_text(
-            &format!("torpedo {}", data.torpedo_cooldown),
-            10,
-            hud_start_y + 40,
+            &format!("{}", data.torpedo_cooldown),
+            40,
+            hud_y + 40,
             10,
             DEBUG_COLOR,
         );

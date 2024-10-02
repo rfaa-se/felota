@@ -78,7 +78,7 @@ impl Command {
             Self::PROJECTILE => Command::Projectile,
             Self::BOOST => Command::Boost,
             Self::TORPEDO => Command::Torpedo,
-            Self::SPAWN => Command::Spawn(Spawn::from_bytes(&data[1..])),
+            Self::SPAWN => Command::Spawn(Spawn::from_bytes(data)),
             _ => panic!("wtf ctype {}", ctype),
         }
     }
@@ -118,7 +118,8 @@ impl Spawn {
     const TRISHIP: u8 = 1;
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let Some((stype, data)) = bytes.split_first() else {
+        // length will be the first byte, don't care about it in here
+        let Some((stype, data)) = bytes[1..].split_first() else {
             panic!("wtf spawn");
         };
 
