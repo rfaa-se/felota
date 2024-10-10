@@ -17,6 +17,7 @@ mod quadtree;
 mod render;
 mod states;
 mod systems;
+mod utils;
 
 fn main() {
     Engine::new().run();

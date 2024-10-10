@@ -63,6 +63,7 @@ struct HudData {
     boost_active: u8,
     boost_cooldown: u8,
     torpedo_cooldown: u8,
+    target: Option<usize>,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -95,6 +96,7 @@ impl Play {
                     boost_active: 0,
                     boost_cooldown: 0,
                     torpedo_cooldown: 0,
+                    target: None,
                 },
                 entity_ids: Vec::new(),
                 map: HashMap::new(),
@@ -236,6 +238,10 @@ impl Play {
 
         if h.is_key_down(KeyboardKey::KEY_LEFT_CONTROL) {
             self.actions.insert(Action::Command(Command::Torpedo));
+        }
+
+        if h.is_key_pressed(KeyboardKey::KEY_TAB) {
+            self.actions.insert(Action::Command(Command::TargetLock));
         }
     }
 
@@ -382,7 +388,7 @@ impl Play {
         r.draw_line(0, hud_y, RENDER_WIDTH, hud_y, HUD_SEPARATOR_COLOR);
 
         let data = &self.player_data.hud_data;
-        r.draw_text("LIFE", 10, hud_y + 10, 10, DEBUG_COLOR);
+        r.draw_text("LFE", 10, hud_y + 10, 10, DEBUG_COLOR);
         r.draw_text(
             &format!("{:.2}", data.life),
             40,
@@ -414,6 +420,15 @@ impl Play {
             &format!("{}", data.torpedo_cooldown),
             40,
             hud_y + 40,
+            10,
+            DEBUG_COLOR,
+        );
+
+        r.draw_text("TGT", 100, hud_y + 10, 10, DEBUG_COLOR);
+        r.draw_text(
+            &format!("{:?}", data.target),
+            130,
+            hud_y + 10,
             10,
             DEBUG_COLOR,
         );
@@ -527,12 +542,16 @@ impl Play {
         } else {
             0
         };
+
         hud.boost_cooldown = if e.boost.active {
             e.boost.cooldown.current
         } else {
             0
         };
+
         hud.torpedo_cooldown = e.cooldown_torpedo.current;
+
+        hud.target = e.targeting.eid;
     }
 
     fn reset_player_data(&mut self) {

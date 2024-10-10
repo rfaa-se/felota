@@ -62,6 +62,12 @@ pub struct Polygon {
     pub bounds_meld: Generation<Rectangle>,
 }
 
+pub struct Targeting {
+    pub eid: Option<usize>,
+    pub timer: Load,
+    pub angle: f32,
+}
+
 // TODO: move me?
 pub struct Direction;
 

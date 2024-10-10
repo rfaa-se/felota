@@ -1,6 +1,9 @@
 use crate::{
+    components::Centroidable,
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
+    quadtree::QuadTree,
+    utils::generate_targeting_area,
 };
 
 use raylib::prelude::*;
@@ -20,6 +23,7 @@ pub enum Command {
     Boost,
     Torpedo,
     Spawn(Spawn),
+    TargetLock,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -41,12 +45,14 @@ impl Command {
     const BOOST: u8 = 6;
     const TORPEDO: u8 = 7;
     const SPAWN: u8 = 8;
+    const TARGET_LOCK: u8 = 9;
 
     pub fn execute(
         &self,
         entities: &mut Entities,
         eid: usize,
         forge: &Forge,
+        quadtree: &QuadTree,
         h: &mut RaylibHandle,
     ) {
         let Some(eidx) = entities.entity(eid) else {
@@ -62,6 +68,7 @@ impl Command {
             Command::Boost => handle_boost(entities, eidx),
             Command::Torpedo => handle_torpedo(entities, eidx, eid, forge),
             Command::Spawn(spawn) => handle_spawn(entities, forge, spawn),
+            Command::TargetLock => handle_target_lock(entities, eidx, quadtree),
         }
     }
 
@@ -79,6 +86,7 @@ impl Command {
             Self::BOOST => Command::Boost,
             Self::TORPEDO => Command::Torpedo,
             Self::SPAWN => Command::Spawn(Spawn::from_bytes(data)),
+            Self::TARGET_LOCK => Command::TargetLock,
             _ => panic!("wtf ctype {}", ctype),
         }
     }
@@ -100,6 +108,7 @@ impl Command {
                 bytes.push(Self::SPAWN);
                 bytes.extend_from_slice(&spawn.to_bytes().into_vec());
             }
+            Command::TargetLock => bytes.push(Self::TARGET_LOCK),
         }
 
         bytes.into_boxed_slice()
@@ -246,6 +255,10 @@ fn handle_decelerate(
             let e = &mut entities.triships[idx].entity;
             (e.body.state.new.rotation, &mut e.motion)
         }
+        EntityIndex::Torpedo(idx) => {
+            let e = &mut entities.torpedoes[idx].entity;
+            (e.body.state.new.rotation, &mut e.motion)
+        }
         _ => panic!("wtf decelerate {:?}", eidx),
     };
 
@@ -288,6 +301,10 @@ fn handle_rotate_left(
             let e = &mut entities.triships[idx].entity;
             (&mut e.motion, e.body.state.old.rotation)
         }
+        EntityIndex::Torpedo(idx) => {
+            let e = &mut entities.torpedoes[idx].entity;
+            (&mut e.motion, e.body.state.old.rotation)
+        }
         _ => panic!("wtf rotate left {:?}", eidx),
     };
 
@@ -326,6 +343,10 @@ fn handle_rotate_right(
     let (motion, old_rotation) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
+            (&mut e.motion, e.body.state.old.rotation)
+        }
+        EntityIndex::Torpedo(idx) => {
+            let e = &mut entities.torpedoes[idx].entity;
             (&mut e.motion, e.body.state.old.rotation)
         }
         _ => panic!("wtf rotate right {:?}", eidx),
@@ -397,10 +418,15 @@ fn handle_boost(entities: &mut Entities, eidx: EntityIndex) {
 }
 
 fn handle_torpedo(entities: &mut Entities, eidx: EntityIndex, id: usize, forge: &Forge) {
-    let (body, velocity, cooldown) = match eidx {
+    let (body, velocity, cooldown, target) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
-            (&e.body, e.motion.velocity, &mut e.cooldown_torpedo)
+            (
+                &e.body,
+                e.motion.velocity,
+                &mut e.cooldown_torpedo,
+                e.targeting.eid,
+            )
         }
         _ => panic!("wtf torpedo {:?}", eidx),
     };
@@ -417,7 +443,95 @@ fn handle_torpedo(entities: &mut Entities, eidx: EntityIndex, id: usize, forge: 
         vertexes[0].x * 0.4 + vertexes[1].x * 0.6,
         vertexes[0].y * 0.4 + vertexes[1].y * 0.6,
     );
-    let torpedo = forge.torpedo(position, rotation, velocity, id);
+    let torpedo = forge.torpedo(position, rotation, velocity, id, target);
 
     entities.add(Entity::Torpedo(torpedo));
+}
+
+fn handle_target_lock(entities: &mut Entities, eidx: EntityIndex, quadtree: &QuadTree) {
+    let (centroid, rotation, eid_target, angle) = match eidx {
+        EntityIndex::Triship(idx) => {
+            let e = &mut entities.triships[idx].entity;
+            (
+                e.body.state.new.shape.centroid(),
+                e.body.state.new.rotation,
+                e.targeting.eid,
+                e.targeting.angle,
+            )
+        }
+        _ => panic!("wtf target lock {:?}", eidx),
+    };
+
+    let area = generate_targeting_area(centroid, rotation, angle);
+    let distance = |eidx: EntityIndex, ents: &Entities| match eidx {
+        EntityIndex::Triship(idx) => Some(
+            ents.triships[idx]
+                .entity
+                .body
+                .state
+                .new
+                .shape
+                .centroid()
+                .distance_to(centroid), // TODO: don't think we need to sqrt(inside distance_to) here
+        ),
+        _ => None,
+    };
+
+    let mut targets = quadtree
+        .get(&area)
+        .iter()
+        .filter_map(|x| {
+            // don't target self
+            if *x == eidx {
+                return None;
+            }
+
+            if let Some(dist) = distance(*x, entities) {
+                Some((*x, dist))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    targets.sort_unstable_by(|(_, dist_a), (_, dist_b)| dist_a.total_cmp(dist_b));
+
+    let idx_current = match eid_target {
+        Some(eid) => targets.iter().position(|(eidx, _)| match eidx {
+            EntityIndex::Triship(idx) => entities.triships[*idx].id == eid,
+            _ => false,
+        }),
+        None => None,
+    };
+
+    let eidx_target = match idx_current {
+        Some(idx) if idx + 1 < targets.len() => {
+            let (eidx, _) = targets[idx + 1];
+            Some(eidx)
+        }
+        _ => {
+            if targets.len() == 0 {
+                None
+            } else {
+                let (eidx, _) = targets[0];
+                Some(eidx)
+            }
+        }
+    };
+
+    let eid_target = match eidx_target {
+        Some(eidx) => match eidx {
+            EntityIndex::Triship(idx) => Some(entities.triships[idx].id),
+            _ => None,
+        },
+        None => None,
+    };
+
+    let target = match eidx {
+        EntityIndex::Triship(idx) => &mut entities.triships[idx].entity.targeting,
+        _ => panic!("wtf target {:?}", eidx),
+    };
+
+    target.eid = eid_target;
+    target.timer.current = target.timer.max;
 }

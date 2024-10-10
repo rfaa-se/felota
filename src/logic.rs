@@ -5,18 +5,20 @@ use std::collections::BTreeSet;
 use crate::{
     bus::Bus,
     commands::{Command, EntityCommands},
-    components::{Generationable, Motion, Renewable, Shape},
+    components::{Centroidable, Generationable, Motion, Renewable, Shape, Targeting},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
     entities::{Entities, EntityIndex},
     forge::Forge,
     messages::LogicMessage,
     quadtree::QuadTree,
+    utils::generate_targeting_area,
 };
 
 use raylib::prelude::*;
 
 use collisions::*;
 
+// TODO: move to constants..?
 const COSMIC_DRAG: Vector2 = Vector2::new(0.1, 0.1);
 const COSMIC_DRAG_ROTATION: f32 = 0.002;
 
@@ -45,24 +47,31 @@ impl Logic {
         forge: &Forge,
         h: &mut RaylibHandle,
     ) {
-        update_dead_removal(entities, &mut self.dead);
+        let dead = &mut self.dead;
+        let commands = &mut self.commands;
+        let quadtree = &mut self.quadtree;
+        let collisions = &mut self.collisions;
+
+        update_dead_removal(entities, dead);
         update_body_generation(entities);
-        update_commands(entities, entity_cmds, &mut self.commands, forge, h);
+        update_commands(entities, entity_cmds, commands, forge, quadtree, h);
         update_boost(entities);
         update_cooldowns(entities);
         update_motion(entities);
         update_body(entities);
-        update_collision_detection(entities, &mut self.quadtree, &mut self.collisions);
-        update_collision_reaction(entities, &mut self.collisions, forge, h);
+        update_collision_detection(entities, quadtree, collisions);
+        update_collision_reaction(entities, collisions, forge, h);
+        update_targeting(entities);
         update_particles_exhaust_alpha(entities);
-        update_particles_lifetime(entities, &mut self.dead);
+        update_particles_lifetime(entities, dead);
         update_particles_explosions(entities);
         update_particles_stars(entities);
         update_torpedo_timers(entities);
-        update_commands_accelerate(entities, &mut self.commands);
-        update_out_of_bounds(entities, &mut self.dead);
-        update_dead_detection(entities, &mut self.dead);
-        update_dead_notify(entities, &self.dead, bus);
+        update_targeting_rotation(entities, commands);
+        update_commands_accelerate(entities, commands);
+        update_out_of_bounds(entities, dead);
+        update_dead_detection(entities, dead);
+        update_dead_notify(entities, dead, bus);
     }
 
     pub fn draw(&self, r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>) {
@@ -71,6 +80,208 @@ impl Logic {
 }
 
 // TODO: move these functions into their own files? need to figure out structure
+
+fn update_targeting_rotation(entities: &mut Entities, commands: &mut Vec<(usize, Command)>) {
+    let targeter_target = entities
+        .torpedoes
+        .iter()
+        .filter_map(|x| match x.entity.target {
+            Some(target) => Some((
+                (
+                    x.id,
+                    x.entity.body.state.new.rotation,
+                    x.entity.body.state.new.shape.centroid(),
+                    x.entity.timer_inactive == 0,
+                ),
+                target,
+            )),
+            None => None,
+        })
+        .collect::<Vec<_>>();
+
+    targeter_target
+        .iter()
+        .for_each(|((eid, rotation, centroid, active), eid_target)| {
+            let (eidx, velocity) = match entities.entity(*eid) {
+                Some(eidx) => match eidx {
+                    EntityIndex::Torpedo(idx) => {
+                        let e = &entities.torpedoes[idx].entity;
+                        (eidx, e.motion.velocity)
+                    }
+                    _ => panic!("wtf targeter 1 {:?}", eidx),
+                },
+                None => panic!("wtf target"),
+            };
+
+            let eidx_target = match entities.entity(*eid_target) {
+                Some(eidx) => eidx,
+                None => {
+                    // target is dead, stop following
+                    let target = match eidx {
+                        EntityIndex::Torpedo(idx) => &mut entities.torpedoes[idx].entity.target,
+                        _ => panic!("wtf target {:?}", eidx),
+                    };
+
+                    *target = None;
+
+                    return;
+                }
+            };
+
+            let centroid_target = match eidx_target {
+                EntityIndex::Triship(idx) => {
+                    let e = &entities.triships[idx].entity;
+                    e.body.state.new.shape.centroid()
+                }
+                _ => panic!("wtf target centroid {:?}", eidx_target),
+            };
+
+            let direction = (centroid_target - *centroid).normalized();
+            let cross = direction.x * rotation.y - direction.y * rotation.x;
+
+            // without some kind of threshold, the torpedo will be very wobbly
+            let threshold = 0.024;
+
+            if cross < -threshold {
+                commands.push((*eid, Command::RotateRight));
+            } else if cross > threshold {
+                commands.push((*eid, Command::RotateLeft));
+            }
+
+            if !active {
+                return;
+            }
+
+            let mut cross_abs = cross.abs();
+            let mut speed = velocity.length_sqr();
+
+            let mut a = 0;
+            if cross_abs > 0.4 {
+                println!("{}", speed);
+                while cross_abs > 0.2 && speed > 300.0 {
+                    commands.push((*eid, Command::Decelerate));
+
+                    cross_abs -= 0.1;
+                    speed -= 100.0;
+                    a += 1;
+                    println!("{}", cross_abs);
+
+                    if cross_abs < threshold * 1.5 {
+                        if cross < -threshold {
+                            commands.push((*eid, Command::RotateRight));
+                        } else if cross > threshold {
+                            commands.push((*eid, Command::RotateLeft));
+                        }
+                    }
+                }
+
+                println!("{} {}", speed, a);
+            }
+        });
+}
+
+fn update_targeting(entities: &mut Entities) {
+    let targeter_target = entities
+        .triships
+        .iter()
+        .map(|x| (x.id, x.entity.targeting.eid))
+        .filter_map(|(tr_eid, te_eid)| match te_eid {
+            Some(te_eid) => Some((tr_eid, te_eid)),
+            None => None,
+        })
+        .collect::<Vec<_>>();
+
+    targeter_target.iter().for_each(|(eid, eid_target)| {
+        let eidx_target = entities.entity(*eid_target);
+        let (eidx, centroid, rotation, angle) = match entities.entity(*eid) {
+            Some(eidx) => match eidx {
+                EntityIndex::Triship(idx) => {
+                    let e = &entities.triships[idx].entity;
+                    (
+                        eidx,
+                        e.body.state.new.shape.centroid(),
+                        e.body.state.new.rotation,
+                        e.targeting.angle,
+                    )
+                }
+                _ => panic!("wtf targeter {:?}", eidx),
+            },
+            None => panic!("wtf target {}", eid),
+        };
+
+        let vert_target = match eidx_target {
+            Some(eidx) => {
+                // target has already been locked
+                if target(entities, eidx).timer.current == 0 {
+                    return;
+                }
+
+                match eidx {
+                    EntityIndex::Triship(idx) => {
+                        &entities.triships[idx].entity.body.polygon.vertexes.new
+                    }
+                    _ => panic!("wtf target {:?}", eidx),
+                }
+            }
+            None => {
+                // the targeted entity is dead
+                reset(target(entities, eidx));
+                return;
+            }
+        };
+
+        let vert_area = generate_targeting_area(centroid, rotation, angle);
+        let mut overlap = 0.0;
+        let mut smallest = Vector2::zero();
+
+        let axes_target = axes(&vert_target);
+        if overlapping(
+            &vert_target,
+            &vert_area,
+            &axes_target,
+            &mut overlap,
+            &mut smallest,
+        ) {
+            lock(target(entities, eidx));
+            return;
+        }
+
+        let axes_area = axes(&vert_area);
+        if overlapping(
+            &vert_target,
+            &vert_area,
+            &axes_area,
+            &mut overlap,
+            &mut smallest,
+        ) {
+            lock(target(entities, eidx));
+            return;
+        }
+
+        // target has been lost
+        reset(target(entities, eidx));
+    });
+
+    fn reset(target: &mut Targeting) {
+        target.eid = None;
+        target.timer.current = target.timer.max;
+    }
+
+    fn lock(target: &mut Targeting) {
+        if target.timer.current == 0 {
+            return;
+        }
+
+        target.timer.current -= 1;
+    }
+
+    fn target(entities: &mut Entities, eidx: EntityIndex) -> &mut Targeting {
+        match eidx {
+            EntityIndex::Triship(idx) => &mut entities.triships[idx].entity.targeting,
+            _ => panic!("wtf target {:?}", eidx),
+        }
+    }
+}
 
 fn update_torpedo_timers(entities: &mut Entities) {
     entities
@@ -92,7 +303,13 @@ fn update_commands_accelerate(entities: &mut Entities, commands: &mut Vec<(usize
     entities
         .torpedoes
         .iter()
-        .map(|x| (x.id, x.entity.life))
+        .filter_map(|x| {
+            if x.entity.timer_inactive == 0 {
+                Some((x.id, x.entity.life))
+            } else {
+                None
+            }
+        })
         .chain(entities.projectiles.iter().map(|x| (x.id, x.entity.life)))
         .filter_map(|(id, life)| if life > 0.0 { Some(id) } else { None })
         .for_each(|x| {
@@ -320,16 +537,17 @@ fn update_commands(
     entity_cmds: &[EntityCommands],
     entity_cmds_internal: &mut Vec<(usize, Command)>,
     forge: &Forge,
+    quadtree: &QuadTree,
     h: &mut RaylibHandle,
 ) {
     for entity_cmd in entity_cmds {
         for cmd in entity_cmd.commands.iter() {
-            cmd.execute(entities, entity_cmd.id, forge, h);
+            cmd.execute(entities, entity_cmd.id, forge, quadtree, h);
         }
     }
 
     while let Some((id, cmd)) = entity_cmds_internal.pop() {
-        cmd.execute(entities, id, forge, h);
+        cmd.execute(entities, id, forge, quadtree, h);
     }
 }
 

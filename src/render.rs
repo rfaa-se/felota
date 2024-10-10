@@ -4,7 +4,10 @@ use raylib::prelude::*;
 
 use crate::{
     components::{Centroidable, Cullable, Lerpable, Triangle},
-    constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
+    constants::{
+        COSMOS_HEIGHT, COSMOS_WIDTH, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH, STARFIELD_HEIGHT,
+        STARFIELD_WIDTH,
+    },
     entities::Entities,
     math::*,
 };
@@ -262,11 +265,18 @@ fn draw_triships(
 
         r.draw_pixel_v(ori, Color::BLUE);
 
-        let deg = gen.new.rotation.y.atan2(gen.new.rotation.x).to_degrees();
         r.draw_text_ex(
             r.get_font_default(),
-            &format!("{}", deg),
+            &format!("{} {}", rad.to_degrees(), rad),
             ent.v1,
+            10.0,
+            1.0,
+            Color::WHITE,
+        );
+        r.draw_text_ex(
+            r.get_font_default(),
+            &format!("{} {}", rot.x, rot.y),
+            ent.v1.add(Vector2::new(0.0, -10.0)),
             10.0,
             1.0,
             Color::WHITE,
@@ -306,5 +316,194 @@ fn draw_triships(
 
         let bounds = &triship.entity.body.polygon.bounds_meld.lerp(delta);
         r.draw_rectangle_lines_ex(bounds, 1.0, Color::BLUE);
+
+        // let top = ori + rot * triship.entity.target.height;
+        // let width_half = triship.entity.target.width / 2.0;
+
+        // let v1 = top + Vector2::new(rot.y, -rot.x) * width_half;
+        // let v2 = ori;
+        // let v3 = top + Vector2::new(-rot.y, rot.x) * width_half;
+        // // r.draw_triangle_lines(v1, v2, v3, Color::BLUE);
+        // r.draw_line_v(v1, v2, Color::BLUE);
+        // r.draw_line_v(v2, v3, Color::BLUE);
+        // r.draw_line_v(v3, v1, Color::BLUE);
+
+        let viewport = Rectangle {
+            x: ori.x - RENDER_WIDTH as f32 / 2.0 + 50.0,
+            y: ori.y - RENDER_HEIGHT as f32 / 2.0 + HUD_HEIGHT as f32 / 2.0 + 50.0,
+            width: RENDER_WIDTH as f32 - 100.0,
+            height: RENDER_HEIGHT as f32 - HUD_HEIGHT as f32 - 100.0,
+        };
+        // let viewport = Rectangle {
+        //     x: ori.x - 200.0,
+        //     y: ori.y - 200.0,
+        //     width: 400.0,
+        //     height: 400.0,
+        // };
+        // let viewport = Rectangle {
+        //     x: ori.x - 150.0,
+        //     y: ori.y - 300.0,
+        //     width: 300.0,
+        //     height: 600.0,
+        // };
+
+        // r.draw_rectangle_lines_ex(viewport, 1.0, Color::BLUE);
+
+        // let (y, x) = (rot.y.atan2(rot.x) - 0.56).sin_cos();
+        // let rot_left = Vector2::new(x, y);
+        // let red = g(ori, rot_left, viewport);
+        // r.draw_line_v(ori, red, Color::RED);
+
+        // let (y, x) = (rot.y.atan2(rot.x) + 0.56).sin_cos();
+        // let rot_right = Vector2::new(x, y);
+        // let green = g(ori, rot_right, viewport);
+        // r.draw_line_v(ori, green, Color::GREEN);
+
+        // // x p[ gr;n, y p[ r;d]]
+        // let a = Vector2::new(green.x, red.y);
+        // r.draw_line_v(green, a, Color::YELLOW);
+
+        // let b = Vector2::new(red.x, red.y);
+        // r.draw_line_v(a, b, Color::PINK);
+
+        // ----
+
+        // let top = ori + rot * ((viewport.width / 3.0) * 2.0);
+        // let width_two_thirds = triship.entity.target.width / 2.0;
+        // let v1 = top + Vector2::new(rot.y, -rot.x) * width_two_thirds;
+        // let v2 = ori;
+        // let v3 = top + Vector2::new(-rot.y, rot.x) * width_two_thirds;
+        // r.draw_triangle_lines(v1, v2, v3, Color::ORANGE);
+
+        let verts = gx(ori, rot, viewport);
+        let c = [
+            Color::RED,
+            Color::ORANGE,
+            Color::GREEN,
+            Color::PINK,
+            Color::SALMON,
+            Color::BROWN,
+        ];
+        for i in 0..verts.len() {
+            let v1 = verts[i];
+            let v2 = verts[if i + 1 == verts.len() { 0 } else { i + 1 }];
+
+            r.draw_line_v(v1, v2, c[i]);
+        }
+    }
+
+    fn gx(ori: Vector2, rot: Vector2, viewport: Rectangle) -> Vec<Vector2> {
+        let mut v = Vec::new();
+        let angle = 0.56;
+        let rad = rot.y.atan2(rot.x);
+
+        let (y, x) = (rad - angle).sin_cos();
+        let a = g(ori, Vector2::new(x, y), viewport);
+
+        let (y, x) = (rad + angle).sin_cos();
+        let b = g(ori, Vector2::new(x, y), viewport);
+
+        v.push(ori);
+        v.push(a);
+        v.push(b);
+
+        let epsilon = 0.5;
+        let equal = |one: f32, two: f32| (one - two).abs() < epsilon;
+        let between = |one, two, length| one > two && one < two + length;
+        let closed = |one: Vector2, two: Vector2| {
+            if equal(one.x, two.x) {
+                // cannot be closed if not by the edge
+                if equal(one.x, viewport.x) || equal(one.x, viewport.x + viewport.width) {
+                    return true;
+                }
+            }
+
+            if equal(one.y, two.y) {
+                // cannot be closed if not by the edge
+                if equal(one.y, viewport.y) || equal(one.y, viewport.y + viewport.height) {
+                    return true;
+                }
+            }
+
+            false
+        };
+        let mut open = !closed(a, b);
+
+        // add new vertexes until we have a closed polygon
+        while open {
+            let prev = v[v.len() - 2];
+
+            let c = if equal(prev.x, viewport.x) && between(prev.y, viewport.y, viewport.height) {
+                Vector2::new(viewport.x, viewport.y)
+            } else if equal(prev.x, viewport.x + viewport.width)
+                && between(prev.y, viewport.y, viewport.height)
+            {
+                Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height)
+            } else if equal(prev.y, viewport.y) && between(prev.x, viewport.x, viewport.width) {
+                Vector2::new(viewport.x + viewport.width, viewport.y)
+            } else if equal(prev.y, viewport.y + viewport.height)
+                && between(prev.x, viewport.x, viewport.width)
+            {
+                Vector2::new(viewport.x, viewport.y + viewport.height)
+            } else {
+                if prev.x == viewport.x && prev.y == viewport.y {
+                    Vector2::new(viewport.x + viewport.width, viewport.y)
+                } else if prev.x == viewport.x + viewport.width && prev.y == viewport.y {
+                    Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height)
+                } else if prev.x == viewport.x && prev.y == viewport.y + viewport.height {
+                    Vector2::new(viewport.x, viewport.y)
+                } else {
+                    Vector2::new(viewport.x, viewport.y + viewport.height)
+                }
+            };
+
+            v.insert(v.len() - 1, c);
+
+            open = !closed(c, b);
+        }
+
+        v
+    }
+
+    fn g(a: Vector2, direction: Vector2, viewport: Rectangle) -> Vector2 {
+        let b = a + direction * 10000.0;
+
+        if let Some(x) = intersection(
+            a,
+            b,
+            Vector2::new(viewport.x, viewport.y),
+            Vector2::new(viewport.x + viewport.width, viewport.y),
+        ) {
+            return x;
+        }
+
+        if let Some(x) = intersection(
+            a,
+            b,
+            Vector2::new(viewport.x + viewport.width, viewport.y),
+            Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height),
+        ) {
+            return x;
+        }
+
+        if let Some(x) = intersection(
+            a,
+            b,
+            Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height),
+            Vector2::new(viewport.x, viewport.y + viewport.height),
+        ) {
+            return x;
+        }
+
+        if let Some(x) = intersection(
+            a,
+            b,
+            Vector2::new(viewport.x, viewport.y + viewport.height),
+            Vector2::new(viewport.x, viewport.y),
+        ) {
+            return x;
+        }
+
+        panic!("wtf big viewport");
     }
 }

@@ -17,9 +17,9 @@ impl Forge {
 
     pub fn triship(&self, position: Vector2) -> Triship {
         let d = Direction::SOUTHEAST;
-        let w = 60.0;
+        let w = 50.0;
         let w3 = w / 3.0;
-        let h = 75.0;
+        let h = 60.0;
         let h3 = h / 3.0;
         let s = RotatedShape {
             shape: Triangle {
@@ -78,6 +78,11 @@ impl Forge {
             cooldown_torpedo: Load {
                 current: 0,
                 max: 20,
+            },
+            targeting: Targeting {
+                eid: None,
+                timer: Load { current: 0, max: 5 },
+                angle: 0.56,
             },
         }
     }
@@ -149,6 +154,7 @@ impl Forge {
         direction: Vector2,
         initial_velocity: Vector2,
         owner_id: usize,
+        target: Option<usize>,
     ) -> Torpedo {
         let width = 8.0;
         let height = 3.0;
@@ -192,14 +198,15 @@ impl Forge {
             motion: Motion {
                 velocity: initial_velocity + direction * speed,
                 acceleration: 1.16,
-                speed_max: 30.0,
+                speed_max: 26.0,
                 rotation_speed: 0.0,
-                rotation_acceleration: 0.0,
-                rotation_speed_max: 0.0,
+                rotation_acceleration: 0.03,
+                rotation_speed_max: 0.2,
             },
             owner_id,
             timer_inactive: 3,
             life: 1.0,
+            target,
         }
     }
 
@@ -601,7 +608,7 @@ impl Forge {
                 h.get_random_value::<i32>(1..STARFIELD_HEIGHT - 1) as f32,
             );
             let lifetime = 0;
-            // 1 in 9 will be moving
+            // 1 in 9 will be moving slightly
             let velocity = if h.get_random_value::<i32>(0..8) > 7 {
                 Vector2::new(
                     h.get_random_value::<i32>(-50..50) as f32 / 1000.0,
@@ -610,6 +617,7 @@ impl Forge {
             } else {
                 Vector2::zero()
             };
+
             let acceleration = 0.0;
             let color = Color::new(
                 h.get_random_value::<i32>(100..255) as u8,

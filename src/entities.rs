@@ -4,7 +4,7 @@ use crate::components::*;
 
 use raylib::prelude::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum EntityIndex {
     Triship(usize),
     Projectile(usize),
@@ -46,6 +46,7 @@ pub struct Triship {
     pub motion: Motion,
     pub boost: Boost,
     pub cooldown_torpedo: Load,
+    pub targeting: Targeting,
 }
 
 pub struct Projectile {
@@ -63,6 +64,7 @@ pub struct Torpedo {
     pub owner_id: usize,
     pub timer_inactive: u8,
     pub life: f32,
+    pub target: Option<usize>,
 }
 
 pub struct Particle {

@@ -405,79 +405,79 @@ pub fn update_collision_detection(
             _ => panic!("shape {:?}", eidx),
         }
     }
+}
 
-    fn axes(vertexes: &[Vector2]) -> Vec<Vector2> {
-        let mut axes = Vec::new();
+pub fn overlapping(
+    v_one: &[Vector2],
+    v_two: &[Vector2],
+    axes: &[Vector2],
+    overlap: &mut f32,
+    smallest: &mut Vector2,
+) -> bool {
+    for axis in axes {
+        let p_one = project(v_one, *axis);
+        let p_two = project(v_two, *axis);
 
-        for i in 0..vertexes.len() {
-            let v1 = vertexes[i];
-            let v2 = vertexes[if i + 1 == vertexes.len() { 0 } else { i + 1 }];
-            let edge = v1 - v2;
-            // if we don't want the mtv(minimal translation vector), we don't need to normalize
-            let norm = Vector2::new(-edge.y, edge.x).normalized();
-
-            axes.push(norm);
+        if !(p_one.y > p_two.x || p_one.x > p_two.y) {
+            return false;
         }
 
-        axes
-    }
+        let mut o = p_one.y.min(p_two.y) - p_one.x.max(p_two.x);
 
-    fn project(vertexes: &[Vector2], axis: Vector2) -> Vector2 {
-        let mut min = axis.dot(vertexes[0]);
-        let mut max = min;
+        if contains(p_one, p_two) || contains(p_two, p_one) {
+            let min = (p_one.x - p_two.x).abs();
+            let max = (p_one.y - p_two.y).abs();
 
-        for i in 1..vertexes.len() {
-            let p = axis.dot(vertexes[i]);
-
-            if p < min {
-                min = p;
-            } else if p > max {
-                max = p;
-            }
-        }
-
-        Vector2::new(min, max)
-    }
-
-    fn overlapping(
-        v_one: &[Vector2],
-        v_two: &[Vector2],
-        axes: &[Vector2],
-        overlap: &mut f32,
-        smallest: &mut Vector2,
-    ) -> bool {
-        for axis in axes {
-            let p_one = project(v_one, *axis);
-            let p_two = project(v_two, *axis);
-
-            if !(p_one.y > p_two.x || p_one.x > p_two.y) {
-                return false;
-            }
-
-            let mut o = p_one.y.min(p_two.y) - p_one.x.max(p_two.x);
-
-            if contains(p_one, p_two) || contains(p_two, p_one) {
-                let min = (p_one.x - p_two.x).abs();
-                let max = (p_one.y - p_two.y).abs();
-
-                if min < max {
-                    o += min;
-                } else {
-                    o += max;
-                }
-            }
-
-            // if we don't want the mtv(minimal translation vector), we can remove overlap and smallest
-            if o < *overlap {
-                *overlap = o;
-                *smallest = *axis;
+            if min < max {
+                o += min;
+            } else {
+                o += max;
             }
         }
 
-        true
+        // if we don't want the mtv(minimal translation vector), we can remove overlap and smallest
+        if o < *overlap {
+            *overlap = o;
+            *smallest = *axis;
+        }
     }
 
-    fn contains(p_one: Vector2, p_two: Vector2) -> bool {
-        p_one.x <= p_two.x && p_one.y >= p_two.y
+    true
+}
+
+pub fn axes(vertexes: &[Vector2]) -> Vec<Vector2> {
+    let mut axes = Vec::new();
+
+    for i in 0..vertexes.len() {
+        let v1 = vertexes[i];
+        let v2 = vertexes[if i + 1 == vertexes.len() { 0 } else { i + 1 }];
+        let edge = v1 - v2;
+        // if we don't want the mtv(minimal translation vector), we don't need to normalize
+        let norm = Vector2::new(-edge.y, edge.x).normalized();
+
+        axes.push(norm);
     }
+
+    axes
+}
+
+fn project(vertexes: &[Vector2], axis: Vector2) -> Vector2 {
+    let mut min = axis.dot(vertexes[0]);
+    let mut max = min;
+
+    for i in 1..vertexes.len() {
+        let p = axis.dot(vertexes[i]);
+
+        if p < min {
+            min = p;
+        } else if p > max {
+            max = p;
+        }
+    }
+
+    Vector2::new(min, max)
+}
+
+fn contains(p_one: Vector2, p_two: Vector2) -> bool {
+    p_one.x <= p_two.x && p_one.y >= p_two.y
 }

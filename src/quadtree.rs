@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::entities::{Entities, EntityIndex};
 use raylib::prelude::*;
 
@@ -60,6 +62,14 @@ impl QuadTree {
         self.root.add(eidx, bounds, entities);
     }
 
+    pub fn get(&self, area: &[Vector2]) -> HashSet<EntityIndex> {
+        let mut v = HashSet::new();
+
+        self.root.get(area, &mut v);
+
+        v
+    }
+
     pub fn draw(&self, r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>) {
         draw_node(&self.root, r);
 
@@ -112,6 +122,22 @@ impl Node {
                 }
             }
         };
+    }
+
+    fn get(&self, area: &[Vector2], entities: &mut HashSet<EntityIndex>) {
+        // TODO: check if area intersects with quad
+        match &self.node_type {
+            NodeType::Leaf(ents) => {
+                for ent in ents {
+                    entities.insert(*ent);
+                }
+            }
+            NodeType::Branch(nodes) => {
+                for node in nodes {
+                    node.get(area, entities);
+                }
+            }
+        }
     }
 
     fn divide(&mut self, entities: &Entities) {
