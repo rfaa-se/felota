@@ -61,13 +61,13 @@ impl Logic {
         update_body(entities);
         update_collision_detection(entities, quadtree, collisions);
         update_collision_reaction(entities, collisions, forge, h);
-        update_targeting(entities);
+        update_targeting_target(entities);
         update_particles_exhaust_alpha(entities);
         update_particles_lifetime(entities, dead);
         update_particles_explosions(entities);
         update_particles_stars(entities);
         update_torpedo_timers(entities);
-        update_targeting_rotation(entities, commands);
+        update_targeting_tracking(entities, commands, forge);
         update_commands_accelerate(entities, commands);
         update_out_of_bounds(entities, dead);
         update_dead_detection(entities, dead);
@@ -81,106 +81,93 @@ impl Logic {
 
 // TODO: move these functions into their own files? need to figure out structure
 
-fn update_targeting_rotation(entities: &mut Entities, commands: &mut Vec<(usize, Command)>) {
+fn update_targeting_tracking(
+    entities: &mut Entities,
+    commands: &mut Vec<(usize, Command)>,
+    _forge: &Forge,
+) {
     let targeter_target = entities
         .torpedoes
         .iter()
         .filter_map(|x| match x.entity.target {
-            Some(target) => Some((
-                (
-                    x.id,
-                    x.entity.body.state.new.rotation,
-                    x.entity.body.state.new.shape.centroid(),
-                    x.entity.timer_inactive == 0,
-                ),
-                target,
-            )),
-            None => None,
+            Some(target) if x.entity.timer_inactive == 0 => Some((x.id, target)),
+            _ => None,
         })
         .collect::<Vec<_>>();
 
-    targeter_target
-        .iter()
-        .for_each(|((eid, rotation, centroid, active), eid_target)| {
-            let (eidx, velocity) = match entities.entity(*eid) {
+    targeter_target.iter().for_each(|(eid, eid_target)| {
+        let (eidx, rotation, centroid, acceleration, velocity, speed_max, rotation_speed) =
+            match entities.entity(*eid) {
                 Some(eidx) => match eidx {
                     EntityIndex::Torpedo(idx) => {
                         let e = &entities.torpedoes[idx].entity;
-                        (eidx, e.motion.velocity)
+                        (
+                            eidx,
+                            e.body.state.new.rotation,
+                            e.body.state.new.shape.centroid(),
+                            e.motion.acceleration,
+                            e.motion.velocity,
+                            e.motion.speed_max,
+                            e.motion.rotation_speed,
+                        )
                     }
                     _ => panic!("wtf targeter 1 {:?}", eidx),
                 },
                 None => panic!("wtf target"),
             };
 
-            let eidx_target = match entities.entity(*eid_target) {
-                Some(eidx) => eidx,
-                None => {
-                    // target is dead, stop following
-                    let target = match eidx {
-                        EntityIndex::Torpedo(idx) => &mut entities.torpedoes[idx].entity.target,
-                        _ => panic!("wtf target {:?}", eidx),
-                    };
+        let eidx_target = match entities.entity(*eid_target) {
+            Some(eidx) => eidx,
+            None => {
+                // target is dead, stop following
+                let target = match eidx {
+                    EntityIndex::Torpedo(idx) => &mut entities.torpedoes[idx].entity.target,
+                    _ => panic!("wtf target {:?}", eidx),
+                };
 
-                    *target = None;
+                *target = None;
 
-                    return;
-                }
-            };
-
-            let centroid_target = match eidx_target {
-                EntityIndex::Triship(idx) => {
-                    let e = &entities.triships[idx].entity;
-                    e.body.state.new.shape.centroid()
-                }
-                _ => panic!("wtf target centroid {:?}", eidx_target),
-            };
-
-            let direction = (centroid_target - *centroid).normalized();
-            let cross = direction.x * rotation.y - direction.y * rotation.x;
-
-            // without some kind of threshold, the torpedo will be very wobbly
-            let threshold = 0.024;
-
-            if cross < -threshold {
-                commands.push((*eid, Command::RotateRight));
-            } else if cross > threshold {
-                commands.push((*eid, Command::RotateLeft));
-            }
-
-            if !active {
                 return;
             }
+        };
 
-            let mut cross_abs = cross.abs();
-            let mut speed = velocity.length_sqr();
-
-            let mut a = 0;
-            if cross_abs > 0.4 {
-                println!("{}", speed);
-                while cross_abs > 0.2 && speed > 300.0 {
-                    commands.push((*eid, Command::Decelerate));
-
-                    cross_abs -= 0.1;
-                    speed -= 100.0;
-                    a += 1;
-                    println!("{}", cross_abs);
-
-                    if cross_abs < threshold * 1.5 {
-                        if cross < -threshold {
-                            commands.push((*eid, Command::RotateRight));
-                        } else if cross > threshold {
-                            commands.push((*eid, Command::RotateLeft));
-                        }
-                    }
-                }
-
-                println!("{} {}", speed, a);
+        let (centroid_target, velocity_target, acceleration_target) = match eidx_target {
+            EntityIndex::Triship(idx) => {
+                let e = &entities.triships[idx].entity;
+                (
+                    e.body.state.new.shape.centroid(),
+                    e.motion.velocity,
+                    e.motion.acceleration,
+                )
             }
-        });
+            _ => panic!("wtf target centroid {:?}", eidx_target),
+        };
+
+        // TODO: check if this can work ok(ish) without predictions
+
+        let predicted_centroid_target = centroid_target + (velocity_target * acceleration_target);
+        let predicted_rotation = (rotation.y.atan2(rotation.x) + rotation_speed).sin_cos();
+        let predicted_rotation = Vector2::new(predicted_rotation.1, predicted_rotation.0);
+        let predicted_velocity = velocity + (predicted_rotation * acceleration);
+        let predicted_centroid = centroid + predicted_velocity;
+
+        let distance = predicted_centroid_target - predicted_centroid;
+        let direction = distance.normalized();
+
+        let threshold = 0.1;
+        let desired_velocity = direction * speed_max;
+        let error = desired_velocity - predicted_velocity;
+        let cross = error.x * predicted_rotation.y - error.y * predicted_rotation.x;
+
+        if cross < -threshold {
+            commands.push((*eid, Command::RotateRight));
+        } else if cross > threshold {
+            commands.push((*eid, Command::RotateLeft));
+        }
+    });
 }
 
-fn update_targeting(entities: &mut Entities) {
+fn update_targeting_target(entities: &mut Entities) {
     let targeter_target = entities
         .triships
         .iter()

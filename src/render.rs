@@ -38,7 +38,7 @@ impl Renderer {
         draw_triships(r, entities, viewport, debug, delta);
         draw_explosions(r, entities, viewport, delta);
         draw_projectiles(r, entities, viewport, delta);
-        draw_torpedoes(r, entities, viewport, delta);
+        draw_torpedoes(r, entities, viewport, debug, delta);
     }
 }
 
@@ -161,6 +161,7 @@ fn draw_torpedoes(
     r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
     entities: &Entities,
     viewport: Rectangle,
+    debug: bool,
     delta: f32,
 ) {
     for torpedo in &entities.torpedoes {
@@ -173,7 +174,6 @@ fn draw_torpedoes(
         let gen = torpedo.entity.body.state;
         let rot = gen.old.rotation.lerp(gen.new.rotation, delta);
         let rad = rot.y.atan2(rot.x);
-        let deg = rad.to_degrees();
         let ent = gen.lerp(delta);
 
         // for some reason we need to add half the width and height to rotated rectangle's x and y
@@ -185,9 +185,19 @@ fn draw_torpedoes(
                 height: ent.height,
             },
             Vector2::new(ent.width / 2.0, ent.height / 2.0),
-            deg,
+            rad.to_degrees(),
             torpedo.entity.body.color,
         );
+
+        if !debug {
+            continue;
+        }
+
+        // draw very long line showing direction of torpedo
+        let v1 = ent.centroid();
+        let v2 = v1 + rot * 5000.0;
+
+        r.draw_line_v(v1, v2, Color::RED);
     }
 }
 
@@ -317,63 +327,12 @@ fn draw_triships(
         let bounds = &triship.entity.body.polygon.bounds_meld.lerp(delta);
         r.draw_rectangle_lines_ex(bounds, 1.0, Color::BLUE);
 
-        // let top = ori + rot * triship.entity.target.height;
-        // let width_half = triship.entity.target.width / 2.0;
-
-        // let v1 = top + Vector2::new(rot.y, -rot.x) * width_half;
-        // let v2 = ori;
-        // let v3 = top + Vector2::new(-rot.y, rot.x) * width_half;
-        // // r.draw_triangle_lines(v1, v2, v3, Color::BLUE);
-        // r.draw_line_v(v1, v2, Color::BLUE);
-        // r.draw_line_v(v2, v3, Color::BLUE);
-        // r.draw_line_v(v3, v1, Color::BLUE);
-
         let viewport = Rectangle {
             x: ori.x - RENDER_WIDTH as f32 / 2.0 + 50.0,
             y: ori.y - RENDER_HEIGHT as f32 / 2.0 + HUD_HEIGHT as f32 / 2.0 + 50.0,
             width: RENDER_WIDTH as f32 - 100.0,
             height: RENDER_HEIGHT as f32 - HUD_HEIGHT as f32 - 100.0,
         };
-        // let viewport = Rectangle {
-        //     x: ori.x - 200.0,
-        //     y: ori.y - 200.0,
-        //     width: 400.0,
-        //     height: 400.0,
-        // };
-        // let viewport = Rectangle {
-        //     x: ori.x - 150.0,
-        //     y: ori.y - 300.0,
-        //     width: 300.0,
-        //     height: 600.0,
-        // };
-
-        // r.draw_rectangle_lines_ex(viewport, 1.0, Color::BLUE);
-
-        // let (y, x) = (rot.y.atan2(rot.x) - 0.56).sin_cos();
-        // let rot_left = Vector2::new(x, y);
-        // let red = g(ori, rot_left, viewport);
-        // r.draw_line_v(ori, red, Color::RED);
-
-        // let (y, x) = (rot.y.atan2(rot.x) + 0.56).sin_cos();
-        // let rot_right = Vector2::new(x, y);
-        // let green = g(ori, rot_right, viewport);
-        // r.draw_line_v(ori, green, Color::GREEN);
-
-        // // x p[ gr;n, y p[ r;d]]
-        // let a = Vector2::new(green.x, red.y);
-        // r.draw_line_v(green, a, Color::YELLOW);
-
-        // let b = Vector2::new(red.x, red.y);
-        // r.draw_line_v(a, b, Color::PINK);
-
-        // ----
-
-        // let top = ori + rot * ((viewport.width / 3.0) * 2.0);
-        // let width_two_thirds = triship.entity.target.width / 2.0;
-        // let v1 = top + Vector2::new(rot.y, -rot.x) * width_two_thirds;
-        // let v2 = ori;
-        // let v3 = top + Vector2::new(-rot.y, rot.x) * width_two_thirds;
-        // r.draw_triangle_lines(v1, v2, v3, Color::ORANGE);
 
         let verts = gx(ori, rot, viewport);
         let c = [
