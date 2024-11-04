@@ -168,7 +168,7 @@ fn draw_torpedoes(
         let bounds = torpedo.entity.body.polygon.bounds_real.lerp(delta);
 
         if bounds.cull(viewport) {
-            continue;
+            // continue;
         }
 
         let gen = torpedo.entity.body.state;

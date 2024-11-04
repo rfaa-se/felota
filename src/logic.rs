@@ -96,25 +96,36 @@ fn update_targeting_tracking(
         .collect::<Vec<_>>();
 
     targeter_target.iter().for_each(|(eid, eid_target)| {
-        let (eidx, rotation, centroid, acceleration, velocity, speed_max, rotation_speed) =
-            match entities.entity(*eid) {
-                Some(eidx) => match eidx {
-                    EntityIndex::Torpedo(idx) => {
-                        let e = &entities.torpedoes[idx].entity;
-                        (
-                            eidx,
-                            e.body.state.new.rotation,
-                            e.body.state.new.shape.centroid(),
-                            e.motion.acceleration,
-                            e.motion.velocity,
-                            e.motion.speed_max,
-                            e.motion.rotation_speed,
-                        )
-                    }
-                    _ => panic!("wtf targeter 1 {:?}", eidx),
-                },
-                None => panic!("wtf target"),
-            };
+        let (
+            eidx,
+            rotation,
+            centroid,
+            acceleration,
+            velocity,
+            speed_max,
+            rotation_speed,
+            rotation_acceleration,
+            // error_prev,
+        ) = match entities.entity(*eid) {
+            Some(eidx) => match eidx {
+                EntityIndex::Torpedo(idx) => {
+                    let e = &entities.torpedoes[idx].entity;
+                    (
+                        eidx,
+                        e.body.state.new.rotation,
+                        e.body.state.new.shape.centroid(),
+                        e.motion.acceleration,
+                        e.motion.velocity,
+                        e.motion.speed_max,
+                        e.motion.rotation_speed,
+                        e.motion.rotation_acceleration,
+                        // e.error_prev,
+                    )
+                }
+                _ => panic!("wtf targeter 1 {:?}", eidx),
+            },
+            None => panic!("wtf target"),
+        };
 
         let eidx_target = match entities.entity(*eid_target) {
             Some(eidx) => eidx,
@@ -131,39 +142,92 @@ fn update_targeting_tracking(
             }
         };
 
-        let (centroid_target, velocity_target, acceleration_target) = match eidx_target {
+        let (
+            centroid_target,
+            velocity_target,
+            acceleration_target,
+            rotation_target,
+            rotation_speed_target,
+        ) = match eidx_target {
             EntityIndex::Triship(idx) => {
                 let e = &entities.triships[idx].entity;
                 (
                     e.body.state.new.shape.centroid(),
                     e.motion.velocity,
                     e.motion.acceleration,
+                    e.body.state.new.rotation,
+                    e.motion.rotation_speed,
                 )
             }
             _ => panic!("wtf target centroid {:?}", eidx_target),
         };
 
-        // TODO: check if this can work ok(ish) without predictions
+        // works without predictions, but not as well
 
-        let predicted_centroid_target = centroid_target + (velocity_target * acceleration_target);
+        let predicted_rotation_target =
+            (rotation_target.y.atan2(rotation_target.x) + rotation_speed_target).sin_cos();
+        let predicted_rotation_target =
+            Vector2::new(predicted_rotation_target.1, predicted_rotation_target.0);
+
+        let predicted_velocity_target =
+            velocity_target + predicted_rotation_target * acceleration_target;
+
+        let predicted_centroid_target = centroid_target + predicted_velocity_target;
+
         let predicted_rotation = (rotation.y.atan2(rotation.x) + rotation_speed).sin_cos();
         let predicted_rotation = Vector2::new(predicted_rotation.1, predicted_rotation.0);
-        let predicted_velocity = velocity + (predicted_rotation * acceleration);
+
+        let predicted_velocity = velocity + predicted_rotation * acceleration;
+
         let predicted_centroid = centroid + predicted_velocity;
 
-        let distance = predicted_centroid_target - predicted_centroid;
-        let direction = distance.normalized();
+        let delta = predicted_centroid_target - predicted_centroid;
+        let direction = delta.normalized();
+        let length = direction.length();
 
-        let threshold = 0.1;
-        let desired_velocity = direction * speed_max;
-        let error = desired_velocity - predicted_velocity;
-        let cross = error.x * predicted_rotation.y - error.y * predicted_rotation.x;
+        let velocity_relative = predicted_velocity_target - predicted_velocity;
+        let component = -velocity_relative.dot(delta);
 
-        if cross < -threshold {
+        let eta = (-component / acceleration)
+            + ((component.powi(2) / acceleration.powi(2)) + ((2.0 * length) / acceleration)).sqrt();
+
+        let impact_target = predicted_centroid_target + velocity_relative * eta;
+
+        let heading = impact_target - predicted_centroid;
+        let rotation_heading = heading.normalized();
+
+        let cross =
+            rotation_heading.x * predicted_rotation.y - rotation_heading.y * predicted_rotation.x;
+
+        let threshold_rotation = rotation_speed.max(rotation_acceleration);
+        if cross < -threshold_rotation {
             commands.push((*eid, Command::RotateRight));
-        } else if cross > threshold {
+        } else if cross > threshold_rotation {
             commands.push((*eid, Command::RotateLeft));
         }
+
+        // TODO: check if this can work ok(ish) without predictions
+
+        // let predicted_centroid_target = centroid_target + (velocity_target * acceleration_target);
+        // let predicted_rotation = (rotation.y.atan2(rotation.x) + rotation_speed).sin_cos();
+        // let predicted_rotation = Vector2::new(predicted_rotation.1, predicted_rotation.0);
+        // let predicted_velocity = velocity + (predicted_rotation * acceleration);
+        // let predicted_centroid = centroid + predicted_velocity;
+
+        // let distance = predicted_centroid_target - predicted_centroid;
+        // let direction = distance.normalized();
+
+        // let threshold = 0.01;
+        // let desired_velocity = direction * speed_max;
+        // let error = desired_velocity - predicted_velocity;
+        // let error = error.normalized();
+        // let cross = error.x * predicted_rotation.y - error.y * predicted_rotation.x;
+
+        // if cross < -threshold {
+        //     commands.push((*eid, Command::RotateRight));
+        // } else if cross > threshold {
+        //     commands.push((*eid, Command::RotateLeft));
+        // }
     });
 }
 
