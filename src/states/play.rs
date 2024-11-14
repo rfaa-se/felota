@@ -5,10 +5,11 @@ use raylib::prelude::*;
 use crate::{
     bus::Bus,
     commands::{Command, EntityCommands, Spawn},
-    components::{Centroidable, Generation},
+    components::{Centroidable, Generation, Lerpable},
     constants::{
-        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, HUD_SEPARATOR_COLOR, RENDER_HEIGHT,
-        RENDER_WIDTH, RESPAWN_TIMER, TICK_SCHEDULED,
+        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, HUD_SEPARATOR_COLOR, HUD_WIDTH, HUD_X,
+        HUD_Y, RENDER_HEIGHT, RENDER_WIDTH, RESPAWN_TIMER, TICK_SCHEDULED, VIEWPORT_HEIGHT,
+        VIEWPORT_WIDTH,
     },
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
@@ -17,6 +18,7 @@ use crate::{
         EngineMessage, EngineRequestMessage, LogicMessage, Message, NetMessage, NetRequestMessage,
     },
     render::Renderer,
+    utils::generate_targeting_area,
 };
 
 pub struct Play {
@@ -49,21 +51,24 @@ struct NetworkData {
     seed: u32,
 }
 
-struct PlayerData {
-    player_entity_id: usize,
-    hud_data: HudData,
+// TODO: rethink this, currently send to the renderer,
+// sometimes we want to display different things depending on the player
+pub struct PlayerData {
+    pub player_entity_id: usize,
+    pub hud_data: HudData,
     entity_ids: Vec<usize>,
     map: HashMap<u32, usize>,
     respawn_timers: Vec<(usize, u8)>,
 }
 
-struct HudData {
+pub struct HudData {
     life: f32,
     speed: f32,
     boost_active: u8,
     boost_cooldown: u8,
     torpedo_cooldown: u8,
-    target: Option<usize>,
+    pub target: Option<usize>,
+    pub target_timer: u8,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -97,6 +102,7 @@ impl Play {
                     boost_cooldown: 0,
                     torpedo_cooldown: 0,
                     target: None,
+                    target_timer: 0,
                 },
                 entity_ids: Vec::new(),
                 map: HashMap::new(),
@@ -104,8 +110,10 @@ impl Play {
             },
             camera: Camera2D {
                 offset: Vector2 {
-                    x: (RENDER_WIDTH / 2) as f32,
-                    y: ((RENDER_HEIGHT / 2) - HUD_HEIGHT / 2) as f32,
+                    // x: ((RENDER_WIDTH / 2) - HUD_WIDTH / 2) as f32,
+                    // y: ((RENDER_HEIGHT / 2) - HUD_HEIGHT / 2) as f32,
+                    x: (VIEWPORT_WIDTH / 2) as f32,
+                    y: (VIEWPORT_HEIGHT / 2) as f32,
                 },
                 target: Vector2::zero(),
                 rotation: 0.0,
@@ -263,33 +271,49 @@ impl Play {
             let mut r = r.begin_mode2D(self.camera);
 
             // the viewport is used to cull entities not currently shown on screen
-            // TODO: should not be smaller than the screen,
-            // only smaller now to make sure code works when culling is implemented
             let viewport = Rectangle {
                 x: self.camera.target.x - self.camera.offset.x,
                 y: self.camera.target.y - self.camera.offset.y,
                 width: self.camera.offset.x * 2.0,
                 height: self.camera.offset.y * 2.0,
-                // x: self.camera.target.x - self.camera.offset.x + 100.0,
-                // y: self.camera.target.y - self.camera.offset.y + 100.0,
-                // width: self.camera.offset.x * 2.0 - 200.0,
-                // height: self.camera.offset.y * 2.0 - 200.0,
             };
 
             if self.debug {
                 self.logic.draw(&mut r);
+
+                if let Some(eidx) = self.entities.entity(self.player_data.player_entity_id) {
+                    let centroid = match eidx {
+                        EntityIndex::Triship(idx) => self.entities.triships[idx]
+                            .entity
+                            .body
+                            .state
+                            .lerp(delta)
+                            .centroid(),
+                        _ => panic!("wtf draw targeting area {:?}", eidx),
+                    };
+
+                    let targeting_area = generate_targeting_area(centroid);
+
+                    r.draw_rectangle_lines_ex(targeting_area, 1.0, Color::DARKPURPLE);
+                }
             }
 
-            self.renderer
-                .draw(&mut r, &self.entities, viewport, self.debug, delta);
+            self.renderer.draw(
+                &mut r,
+                &self.entities,
+                &self.player_data,
+                viewport,
+                self.debug,
+                delta,
+            );
         }
 
         if self.stalling {
             let len = r.measure_text("stalling", 10);
             r.draw_text(
                 "stalling",
-                RENDER_WIDTH as i32 / 2 - len / 2,
-                RENDER_HEIGHT / 2,
+                VIEWPORT_WIDTH as i32 / 2 - len / 2,
+                VIEWPORT_HEIGHT / 2,
                 10,
                 DEBUG_COLOR,
             );
@@ -382,53 +406,71 @@ impl Play {
     }
 
     fn draw_hud(&mut self, r: &mut RaylibTextureMode<RaylibDrawHandle>, _delta: f32) {
-        let hud_y = RENDER_HEIGHT - HUD_HEIGHT;
+        r.draw_rectangle(HUD_X, HUD_Y, HUD_WIDTH, HUD_HEIGHT, HUD_BACKGROUND_COLOR);
+        r.draw_line(HUD_X, HUD_Y, HUD_X, HUD_Y + HUD_HEIGHT, HUD_SEPARATOR_COLOR);
 
-        r.draw_rectangle(0, hud_y, RENDER_WIDTH, HUD_HEIGHT, HUD_BACKGROUND_COLOR);
-        r.draw_line(0, hud_y, RENDER_WIDTH, hud_y, HUD_SEPARATOR_COLOR);
-
+        let pad = 8;
+        let pad_y = 3;
         let data = &self.player_data.hud_data;
-        r.draw_text("LFE", 10, hud_y + 10, 10, DEBUG_COLOR);
+
+        r.draw_text("LFE", HUD_X + pad, HUD_Y + 10 + pad_y * 1, 10, DEBUG_COLOR);
         r.draw_text(
             &format!("{:.2}", data.life),
-            40,
-            hud_y + 10,
+            HUD_X + pad + 30,
+            HUD_Y + 10 + pad_y * 1,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("SPD", 10, hud_y + 20, 10, DEBUG_COLOR);
+        r.draw_text("SPD", HUD_X + pad, HUD_Y + 20 + pad_y * 2, 10, DEBUG_COLOR);
         r.draw_text(
             &format!("{:.2}", data.speed),
-            40,
-            hud_y + 20,
+            HUD_X + pad + 30,
+            HUD_Y + 20 + pad_y * 2,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("BST", 10, hud_y + 30, 10, DEBUG_COLOR);
+        r.draw_text("BST", HUD_X + pad, HUD_Y + 30 + pad_y * 3, 10, DEBUG_COLOR);
         r.draw_text(
-            &format!("{} {}", data.boost_active, data.boost_cooldown),
-            40,
-            hud_y + 30,
+            &format!("{} ", data.boost_active),
+            HUD_X + pad + 30,
+            HUD_Y + 30 + pad_y * 3,
+            10,
+            DEBUG_COLOR,
+        );
+        r.draw_text(
+            &format!("{} ", data.boost_cooldown),
+            HUD_X + pad + 50,
+            HUD_Y + 30 + pad_y * 3,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("TRP", 10, hud_y + 40, 10, DEBUG_COLOR);
+        r.draw_text("TRP", HUD_X + pad, HUD_Y + 40 + pad_y * 4, 10, DEBUG_COLOR);
         r.draw_text(
             &format!("{}", data.torpedo_cooldown),
-            40,
-            hud_y + 40,
+            HUD_X + pad + 30,
+            HUD_Y + 40 + pad_y * 4,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("TGT", 100, hud_y + 10, 10, DEBUG_COLOR);
+        r.draw_text("TGT", HUD_X + pad, HUD_Y + 50 + pad_y * 5, 10, DEBUG_COLOR);
         r.draw_text(
-            &format!("{:?}", data.target),
-            130,
-            hud_y + 10,
+            &format!("{}", data.target_timer),
+            HUD_X + pad + 30,
+            HUD_Y + 50 + pad_y * 5,
+            10,
+            DEBUG_COLOR,
+        );
+        r.draw_text(
+            &match data.target {
+                Some(target) => target.to_string(),
+                None => "-".to_string(),
+            },
+            HUD_X + pad + 30,
+            HUD_Y + 60 + pad_y * 6,
             10,
             DEBUG_COLOR,
         );
@@ -552,6 +594,11 @@ impl Play {
         hud.torpedo_cooldown = e.cooldown_torpedo.current;
 
         hud.target = e.targeting.eid;
+        hud.target_timer = if e.targeting.timer.current != e.targeting.timer.max {
+            e.targeting.timer.current
+        } else {
+            0
+        };
     }
 
     fn reset_player_data(&mut self) {

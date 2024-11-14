@@ -425,7 +425,7 @@ fn handle_torpedo(entities: &mut Entities, eidx: EntityIndex, id: usize, forge: 
                 &e.body,
                 e.motion.velocity,
                 &mut e.cooldown_torpedo,
-                e.targeting.eid,
+                &e.targeting,
             )
         }
         _ => panic!("wtf torpedo {:?}", eidx),
@@ -437,48 +437,38 @@ fn handle_torpedo(entities: &mut Entities, eidx: EntityIndex, id: usize, forge: 
 
     cooldown.current = cooldown.max;
 
+    // only use target if it's been locked
+    let target = if target.timer.current == 0 {
+        target.eid
+    } else {
+        None
+    };
+
     let rotation = body.state.new.rotation;
     let vertexes = &body.polygon.vertexes.new;
     let position = Vector2::new(
         vertexes[0].x * 0.4 + vertexes[1].x * 0.6,
         vertexes[0].y * 0.4 + vertexes[1].y * 0.6,
     );
+
     let torpedo = forge.torpedo(position, rotation, velocity, id, target);
 
     entities.add(Entity::Torpedo(torpedo));
 }
 
 fn handle_target_lock(entities: &mut Entities, eidx: EntityIndex, quadtree: &QuadTree) {
-    let (centroid, rotation, eid_target, angle) = match eidx {
+    let (centroid, eid_target) = match eidx {
         EntityIndex::Triship(idx) => {
             let e = &mut entities.triships[idx].entity;
-            (
-                e.body.state.new.shape.centroid(),
-                e.body.state.new.rotation,
-                e.targeting.eid,
-                e.targeting.angle,
-            )
+            (e.body.state.new.shape.centroid(), e.targeting.eid)
         }
         _ => panic!("wtf target lock {:?}", eidx),
     };
 
-    let area = generate_targeting_area(centroid, rotation, angle);
-    let distance = |eidx: EntityIndex, ents: &Entities| match eidx {
-        EntityIndex::Triship(idx) => Some(
-            ents.triships[idx]
-                .entity
-                .body
-                .state
-                .new
-                .shape
-                .centroid()
-                .distance_to(centroid), // TODO: don't think we need to sqrt(inside distance_to) here
-        ),
-        _ => None,
-    };
+    let area = generate_targeting_area(centroid);
 
     let mut targets = quadtree
-        .get(&area)
+        .get(&area, entities)
         .iter()
         .filter_map(|x| {
             // don't target self
@@ -486,11 +476,23 @@ fn handle_target_lock(entities: &mut Entities, eidx: EntityIndex, quadtree: &Qua
                 return None;
             }
 
-            if let Some(dist) = distance(*x, entities) {
-                Some((*x, dist))
-            } else {
-                None
-            }
+            let c = match *x {
+                EntityIndex::Triship(idx) => entities.triships[idx]
+                    .entity
+                    .body
+                    .state
+                    .new
+                    .shape
+                    .centroid(),
+                _ => return None,
+            };
+
+            let cx = c.x - centroid.x;
+            let cy = c.y - centroid.y;
+
+            let dist_sqr = (cx * cx) + (cy * cy);
+
+            Some((*x, dist_sqr))
         })
         .collect::<Vec<_>>();
 
@@ -510,7 +512,7 @@ fn handle_target_lock(entities: &mut Entities, eidx: EntityIndex, quadtree: &Qua
             Some(eidx)
         }
         _ => {
-            if targets.len() == 0 {
+            if targets.len() == 0 || idx_current.is_some() {
                 None
             } else {
                 let (eidx, _) = targets[0];
@@ -527,11 +529,11 @@ fn handle_target_lock(entities: &mut Entities, eidx: EntityIndex, quadtree: &Qua
         None => None,
     };
 
-    let target = match eidx {
+    let targeting = match eidx {
         EntityIndex::Triship(idx) => &mut entities.triships[idx].entity.targeting,
-        _ => panic!("wtf target {:?}", eidx),
+        _ => panic!("wtf targeting {:?}", eidx),
     };
 
-    target.eid = eid_target;
-    target.timer.current = target.timer.max;
+    targeting.eid = eid_target;
+    targeting.timer.current = targeting.timer.max;
 }

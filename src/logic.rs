@@ -67,7 +67,7 @@ impl Logic {
         update_particles_explosions(entities);
         update_particles_stars(entities);
         update_torpedo_timers(entities);
-        update_targeting_tracking(entities, commands, forge);
+        update_targeting_tracking(entities, commands);
         update_commands_accelerate(entities, commands);
         update_out_of_bounds(entities, dead);
         update_dead_detection(entities, dead);
@@ -81,11 +81,7 @@ impl Logic {
 
 // TODO: move these functions into their own files? need to figure out structure
 
-fn update_targeting_tracking(
-    entities: &mut Entities,
-    commands: &mut Vec<(usize, Command)>,
-    _forge: &Forge,
-) {
+fn update_targeting_tracking(entities: &mut Entities, commands: &mut Vec<(usize, Command)>) {
     let targeter_target = entities
         .torpedoes
         .iter()
@@ -194,73 +190,47 @@ fn update_targeting_target(entities: &mut Entities) {
 
     targeter_target.iter().for_each(|(eid, eid_target)| {
         let eidx_target = entities.entity(*eid_target);
-        let (eidx, centroid, rotation, angle) = match entities.entity(*eid) {
+        let (eidx, centroid) = match entities.entity(*eid) {
             Some(eidx) => match eidx {
                 EntityIndex::Triship(idx) => {
                     let e = &entities.triships[idx].entity;
-                    (
-                        eidx,
-                        e.body.state.new.shape.centroid(),
-                        e.body.state.new.rotation,
-                        e.targeting.angle,
-                    )
+                    (eidx, e.body.state.new.shape.centroid())
                 }
                 _ => panic!("wtf targeter {:?}", eidx),
             },
             None => panic!("wtf target {}", eid),
         };
 
-        let vert_target = match eidx_target {
-            Some(eidx) => {
+        let bounds_target = &match eidx_target {
+            Some(eidx_target) => {
                 // target has already been locked
                 if target(entities, eidx).timer.current == 0 {
                     return;
                 }
 
-                match eidx {
-                    EntityIndex::Triship(idx) => {
-                        &entities.triships[idx].entity.body.polygon.vertexes.new
-                    }
-                    _ => panic!("wtf target {:?}", eidx),
+                match eidx_target {
+                    EntityIndex::Triship(idx) => &entities.triships[idx].entity.body.polygon,
+                    _ => panic!("wtf target area {:?}", eidx_target),
                 }
+                .bounds_meld
+                .new
             }
             None => {
-                // the targeted entity is dead
+                // target is dead
                 reset(target(entities, eidx));
                 return;
             }
         };
 
-        let vert_area = generate_targeting_area(centroid, rotation, angle);
-        let mut overlap = 0.0;
-        let mut smallest = Vector2::zero();
+        let targeting_area = generate_targeting_area(centroid);
 
-        let axes_target = axes(&vert_target);
-        if overlapping(
-            &vert_target,
-            &vert_area,
-            &axes_target,
-            &mut overlap,
-            &mut smallest,
-        ) {
+        if targeting_area.check_collision_recs(bounds_target) {
+            // target is still within reach
             lock(target(entities, eidx));
-            return;
+        } else {
+            // target has been lost
+            reset(target(entities, eidx));
         }
-
-        let axes_area = axes(&vert_area);
-        if overlapping(
-            &vert_target,
-            &vert_area,
-            &axes_area,
-            &mut overlap,
-            &mut smallest,
-        ) {
-            lock(target(entities, eidx));
-            return;
-        }
-
-        // target has been lost
-        reset(target(entities, eidx));
     });
 
     fn reset(target: &mut Targeting) {

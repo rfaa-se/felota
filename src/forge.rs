@@ -81,8 +81,10 @@ impl Forge {
             },
             targeting: Targeting {
                 eid: None,
-                timer: Load { current: 0, max: 5 },
-                angle: 0.56,
+                timer: Load {
+                    current: 0,
+                    max: 50,
+                },
             },
         }
     }

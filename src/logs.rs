@@ -31,7 +31,7 @@ impl System {
         }
 
         self.logs.iter().fold(
-            RENDER_HEIGHT as i32 - self.logs.len() as i32 * 10 - 62,
+            RENDER_HEIGHT as i32 - self.logs.len() as i32 * 10,
             |y, log| {
                 r.draw_text(log, 3, y, 10, DEBUG_COLOR);
                 y + 10
@@ -39,7 +39,7 @@ impl System {
         );
 
         self.command_logs.iter().fold(
-            RENDER_HEIGHT as i32 - self.command_logs.len() as i32 * 10 - 282,
+            RENDER_HEIGHT as i32 - self.command_logs.len() as i32 * 10 - 220,
             |y, log| {
                 r.draw_text(log, 3, y, 10, DEBUG_COLOR);
                 y + 10

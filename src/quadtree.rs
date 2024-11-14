@@ -62,10 +62,14 @@ impl QuadTree {
         self.root.add(eidx, bounds, entities);
     }
 
-    pub fn get(&self, area: &[Vector2]) -> HashSet<EntityIndex> {
+    pub fn get(&self, area: &Rectangle, entities: &Entities) -> HashSet<EntityIndex> {
         let mut v = HashSet::new();
 
+        // get potential entities
         self.root.get(area, &mut v);
+
+        // remove entities not included within the area
+        v.retain(|x| bounds(*x, entities).check_collision_recs(area));
 
         v
     }
@@ -124,12 +128,13 @@ impl Node {
         };
     }
 
-    fn get(&self, area: &[Vector2], entities: &mut HashSet<EntityIndex>) {
-        // TODO: check if area intersects with quad
+    fn get(&self, area: &Rectangle, entities: &mut HashSet<EntityIndex>) {
         match &self.node_type {
             NodeType::Leaf(ents) => {
-                for ent in ents {
-                    entities.insert(*ent);
+                if self.dimension.check_collision_recs(&area) {
+                    for ent in ents {
+                        entities.insert(*ent);
+                    }
                 }
             }
             NodeType::Branch(nodes) => {

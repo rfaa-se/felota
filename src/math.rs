@@ -7,7 +7,8 @@ pub fn rotate(point: Vector2, origin: Vector2, sin: f32, cos: f32) -> Vector2 {
     }
 }
 
-pub fn intersection(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> Option<Vector2> {
+// not currently used but might be nice to have..?
+pub fn _intersection(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> Option<Vector2> {
     fn area(a: Vector2, b: Vector2, c: Vector2) -> f32 {
         (a.x - c.x) * (b.y - c.y) - (a.y - c.y) * (b.x - c.x)
     }

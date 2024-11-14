@@ -4,12 +4,10 @@ use raylib::prelude::*;
 
 use crate::{
     components::{Centroidable, Cullable, Lerpable, Triangle},
-    constants::{
-        COSMOS_HEIGHT, COSMOS_WIDTH, HUD_HEIGHT, RENDER_HEIGHT, RENDER_WIDTH, STARFIELD_HEIGHT,
-        STARFIELD_WIDTH,
-    },
+    constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
     entities::Entities,
     math::*,
+    states::play::PlayerData,
 };
 
 pub struct Renderer {}
@@ -23,6 +21,7 @@ impl Renderer {
         &self,
         r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
         entities: &Entities,
+        player_data: &PlayerData,
         viewport: Rectangle,
         debug: bool,
         delta: f32,
@@ -35,7 +34,7 @@ impl Renderer {
 
         draw_stars(r, entities, viewport, delta);
         draw_exhausts(r, entities, viewport, delta);
-        draw_triships(r, entities, viewport, debug, delta);
+        draw_triships(r, entities, player_data, viewport, debug, delta);
         draw_explosions(r, entities, viewport, delta);
         draw_projectiles(r, entities, viewport, delta);
         draw_torpedoes(r, entities, viewport, debug, delta);
@@ -244,6 +243,7 @@ fn draw_exhausts(
 fn draw_triships(
     r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
     entities: &Entities,
+    player_data: &PlayerData,
     viewport: Rectangle,
     debug: bool,
     delta: f32,
@@ -268,6 +268,17 @@ fn draw_triships(
         };
 
         r.draw_triangle_lines(ent.v1, ent.v2, ent.v3, triship.entity.body.color);
+
+        if let Some(target) = player_data.hud_data.target {
+            if target == triship.id {
+                r.draw_circle_lines(
+                    ori.x as i32,
+                    ori.y as i32,
+                    40.0 + player_data.hud_data.target_timer as f32,
+                    Color::DARKRED,
+                );
+            }
+        }
 
         if !debug {
             continue;
@@ -326,143 +337,5 @@ fn draw_triships(
 
         let bounds = &triship.entity.body.polygon.bounds_meld.lerp(delta);
         r.draw_rectangle_lines_ex(bounds, 1.0, Color::BLUE);
-
-        let viewport = Rectangle {
-            x: ori.x - RENDER_WIDTH as f32 / 2.0 + 50.0,
-            y: ori.y - RENDER_HEIGHT as f32 / 2.0 + HUD_HEIGHT as f32 / 2.0 + 50.0,
-            width: RENDER_WIDTH as f32 - 100.0,
-            height: RENDER_HEIGHT as f32 - HUD_HEIGHT as f32 - 100.0,
-        };
-
-        let verts = gx(ori, rot, viewport);
-        let c = [
-            Color::RED,
-            Color::ORANGE,
-            Color::GREEN,
-            Color::PINK,
-            Color::SALMON,
-            Color::BROWN,
-        ];
-        for i in 0..verts.len() {
-            let v1 = verts[i];
-            let v2 = verts[if i + 1 == verts.len() { 0 } else { i + 1 }];
-
-            r.draw_line_v(v1, v2, c[i]);
-        }
-    }
-
-    fn gx(ori: Vector2, rot: Vector2, viewport: Rectangle) -> Vec<Vector2> {
-        let mut v = Vec::new();
-        let angle = 0.56;
-        let rad = rot.y.atan2(rot.x);
-
-        let (y, x) = (rad - angle).sin_cos();
-        let a = g(ori, Vector2::new(x, y), viewport);
-
-        let (y, x) = (rad + angle).sin_cos();
-        let b = g(ori, Vector2::new(x, y), viewport);
-
-        v.push(ori);
-        v.push(a);
-        v.push(b);
-
-        let epsilon = 0.5;
-        let equal = |one: f32, two: f32| (one - two).abs() < epsilon;
-        let between = |one, two, length| one > two && one < two + length;
-        let closed = |one: Vector2, two: Vector2| {
-            if equal(one.x, two.x) {
-                // cannot be closed if not by the edge
-                if equal(one.x, viewport.x) || equal(one.x, viewport.x + viewport.width) {
-                    return true;
-                }
-            }
-
-            if equal(one.y, two.y) {
-                // cannot be closed if not by the edge
-                if equal(one.y, viewport.y) || equal(one.y, viewport.y + viewport.height) {
-                    return true;
-                }
-            }
-
-            false
-        };
-        let mut open = !closed(a, b);
-
-        // add new vertexes until we have a closed polygon
-        while open {
-            let prev = v[v.len() - 2];
-
-            let c = if equal(prev.x, viewport.x) && between(prev.y, viewport.y, viewport.height) {
-                Vector2::new(viewport.x, viewport.y)
-            } else if equal(prev.x, viewport.x + viewport.width)
-                && between(prev.y, viewport.y, viewport.height)
-            {
-                Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height)
-            } else if equal(prev.y, viewport.y) && between(prev.x, viewport.x, viewport.width) {
-                Vector2::new(viewport.x + viewport.width, viewport.y)
-            } else if equal(prev.y, viewport.y + viewport.height)
-                && between(prev.x, viewport.x, viewport.width)
-            {
-                Vector2::new(viewport.x, viewport.y + viewport.height)
-            } else {
-                if prev.x == viewport.x && prev.y == viewport.y {
-                    Vector2::new(viewport.x + viewport.width, viewport.y)
-                } else if prev.x == viewport.x + viewport.width && prev.y == viewport.y {
-                    Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height)
-                } else if prev.x == viewport.x && prev.y == viewport.y + viewport.height {
-                    Vector2::new(viewport.x, viewport.y)
-                } else {
-                    Vector2::new(viewport.x, viewport.y + viewport.height)
-                }
-            };
-
-            v.insert(v.len() - 1, c);
-
-            open = !closed(c, b);
-        }
-
-        v
-    }
-
-    fn g(a: Vector2, direction: Vector2, viewport: Rectangle) -> Vector2 {
-        let b = a + direction * 10000.0;
-
-        if let Some(x) = intersection(
-            a,
-            b,
-            Vector2::new(viewport.x, viewport.y),
-            Vector2::new(viewport.x + viewport.width, viewport.y),
-        ) {
-            return x;
-        }
-
-        if let Some(x) = intersection(
-            a,
-            b,
-            Vector2::new(viewport.x + viewport.width, viewport.y),
-            Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height),
-        ) {
-            return x;
-        }
-
-        if let Some(x) = intersection(
-            a,
-            b,
-            Vector2::new(viewport.x + viewport.width, viewport.y + viewport.height),
-            Vector2::new(viewport.x, viewport.y + viewport.height),
-        ) {
-            return x;
-        }
-
-        if let Some(x) = intersection(
-            a,
-            b,
-            Vector2::new(viewport.x, viewport.y + viewport.height),
-            Vector2::new(viewport.x, viewport.y),
-        ) {
-            return x;
-        }
-
-        panic!("wtf big viewport");
     }
 }
