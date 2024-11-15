@@ -5,9 +5,9 @@ use raylib::prelude::*;
 use crate::{
     components::{Centroidable, Cullable, Lerpable, Triangle},
     constants::{COSMOS_HEIGHT, COSMOS_WIDTH, STARFIELD_HEIGHT, STARFIELD_WIDTH},
-    entities::Entities,
+    entities::{Entities, EntityIndex},
     math::*,
-    states::play::PlayerData,
+    states::play::RenderData,
 };
 
 pub struct Renderer {}
@@ -21,7 +21,7 @@ impl Renderer {
         &self,
         r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
         entities: &Entities,
-        player_data: &PlayerData,
+        data: &RenderData,
         viewport: Rectangle,
         debug: bool,
         delta: f32,
@@ -32,13 +32,67 @@ impl Renderer {
 
         r.draw_rectangle_lines(0, 0, COSMOS_WIDTH, COSMOS_HEIGHT, Color::RED);
 
-        draw_stars(r, entities, viewport, delta);
-        draw_exhausts(r, entities, viewport, delta);
-        draw_triships(r, entities, player_data, viewport, debug, delta);
-        draw_explosions(r, entities, viewport, delta);
-        draw_projectiles(r, entities, viewport, delta);
-        draw_torpedoes(r, entities, viewport, debug, delta);
+        draw_entities(r, entities, data, viewport, debug, delta);
+        draw_visuals(r, entities, data, viewport, debug, delta);
     }
+}
+
+fn draw_visuals(
+    r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
+    entities: &Entities,
+    data: &RenderData,
+    viewport: Rectangle,
+    debug: bool,
+    delta: f32,
+) {
+    // draw line towards the target
+    return;
+    // TODO: currently bugs
+    if let (Some(eidx_target), Some(eidx)) = (data.target_eidx, data.player_eidx) {
+        let centroid_target = match eidx_target {
+            EntityIndex::Triship(idx) => entities.triships[idx]
+                .entity
+                .body
+                .state
+                .lerp(delta)
+                .centroid(),
+            _ => panic!("wtf centroid target {:?}", eidx_target),
+        };
+
+        let centroid = match eidx {
+            EntityIndex::Triship(idx) => entities.triships[idx]
+                .entity
+                .body
+                .state
+                .lerp(delta)
+                .centroid(),
+            _ => panic!("wtf centroid {:?}", eidx_target),
+        };
+
+        let cen = centroid_target - centroid;
+        let rot = cen.normalized();
+
+        let start = centroid + rot * 40.0;
+        let end = start + rot * 25.0;
+
+        r.draw_line_v(start, end, Color::RED);
+    }
+}
+
+fn draw_entities(
+    r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
+    entities: &Entities,
+    data: &RenderData,
+    viewport: Rectangle,
+    debug: bool,
+    delta: f32,
+) {
+    draw_stars(r, entities, viewport, delta);
+    draw_exhausts(r, entities, viewport, delta);
+    draw_triships(r, entities, data, viewport, debug, delta);
+    draw_explosions(r, entities, viewport, delta);
+    draw_projectiles(r, entities, viewport, delta);
+    draw_torpedoes(r, entities, viewport, debug, delta);
 }
 
 fn draw_stars(
@@ -243,7 +297,7 @@ fn draw_exhausts(
 fn draw_triships(
     r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
     entities: &Entities,
-    player_data: &PlayerData,
+    data: &RenderData,
     viewport: Rectangle,
     debug: bool,
     delta: f32,
@@ -269,12 +323,12 @@ fn draw_triships(
 
         r.draw_triangle_lines(ent.v1, ent.v2, ent.v3, triship.entity.body.color);
 
-        if let Some(target) = player_data.hud_data.target {
+        if let Some(target) = data.target {
             if target == triship.id {
                 r.draw_circle_lines(
                     ori.x as i32,
                     ori.y as i32,
-                    40.0 + player_data.hud_data.target_timer as f32,
+                    40.0 + data.target_timer as f32,
                     Color::DARKRED,
                 );
             }

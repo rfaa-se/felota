@@ -38,6 +38,7 @@ pub struct Play {
     commands: Vec<TickCommands>,
     command_queue: BTreeSet<Command>,
     actions: BTreeSet<Action>,
+    render_data: RenderData,
 }
 
 struct TickCommands {
@@ -51,24 +52,30 @@ struct NetworkData {
     seed: u32,
 }
 
-// TODO: rethink this, currently send to the renderer,
-// sometimes we want to display different things depending on the player
-pub struct PlayerData {
+pub struct RenderData {
+    pub target: Option<usize>,
+    pub target_timer: u8,
+    pub target_eidx: Option<EntityIndex>,
     pub player_entity_id: usize,
-    pub hud_data: HudData,
+    pub player_eidx: Option<EntityIndex>,
+}
+
+struct PlayerData {
+    player_entity_id: usize,
+    hud_data: HudData,
     entity_ids: Vec<usize>,
     map: HashMap<u32, usize>,
     respawn_timers: Vec<(usize, u8)>,
 }
 
-pub struct HudData {
+struct HudData {
     life: f32,
     speed: f32,
     boost_active: u8,
     boost_cooldown: u8,
     torpedo_cooldown: u8,
-    pub target: Option<usize>,
-    pub target_timer: u8,
+    target: Option<usize>,
+    target_timer: u8,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -108,10 +115,15 @@ impl Play {
                 map: HashMap::new(),
                 respawn_timers: Vec::new(),
             },
+            render_data: RenderData {
+                target: None,
+                target_timer: 0,
+                target_eidx: None,
+                player_entity_id: 0,
+                player_eidx: None,
+            },
             camera: Camera2D {
                 offset: Vector2 {
-                    // x: ((RENDER_WIDTH / 2) - HUD_WIDTH / 2) as f32,
-                    // y: ((RENDER_HEIGHT / 2) - HUD_HEIGHT / 2) as f32,
                     x: (VIEWPORT_WIDTH / 2) as f32,
                     y: (VIEWPORT_HEIGHT / 2) as f32,
                 },
@@ -173,6 +185,7 @@ impl Play {
 
         self.update_player_respawns();
         self.update_player_data();
+        self.update_render_data();
 
         let mut q = Vec::new();
         while let Some(c) = self.command_queue.pop_first() {
@@ -278,6 +291,7 @@ impl Play {
                 height: self.camera.offset.y * 2.0,
             };
 
+            // TODO: should we really render this here? renderer?
             if self.debug {
                 self.logic.draw(&mut r);
 
@@ -301,7 +315,7 @@ impl Play {
             self.renderer.draw(
                 &mut r,
                 &self.entities,
-                &self.player_data,
+                &self.render_data,
                 viewport,
                 self.debug,
                 delta,
@@ -390,7 +404,7 @@ impl Play {
 
                         // if we have died, let's reset the player data
                         if self.player_data.player_entity_id == *eid {
-                            self.reset_player_data();
+                            self.reset_data();
                         }
                     }
                 }
@@ -594,23 +608,48 @@ impl Play {
         hud.torpedo_cooldown = e.cooldown_torpedo.current;
 
         hud.target = e.targeting.eid;
-        hud.target_timer = if e.targeting.timer.current != e.targeting.timer.max {
-            e.targeting.timer.current
+
+        if e.targeting.timer.current != e.targeting.timer.max {
+            hud.target_timer = e.targeting.timer.current;
         } else {
-            0
-        };
+            hud.target_timer = 0;
+        }
     }
 
-    fn reset_player_data(&mut self) {
+    fn update_render_data(&mut self) {
+        let p = &self.player_data;
+        let r = &mut self.render_data;
+
+        r.target = p.hud_data.target;
+        r.target_timer = p.hud_data.target_timer;
+
+        if let Some(eid) = r.target {
+            r.target_eidx = self.entities.entity(eid);
+        }
+
+        r.player_entity_id = p.player_entity_id;
+        r.player_eidx = self.entities.entity(r.player_entity_id);
+    }
+
+    fn reset_data(&mut self) {
+        let r = &mut self.render_data;
+        let p = &mut self.player_data;
+
+        r.target = None;
+        r.target_timer = 0;
+        r.target_eidx = None;
+        r.player_entity_id = 0;
+        r.player_eidx = None;
+
         // set the camera target to the latest known position
         self.camera_target = Generation {
             old: self.camera_target.new,
             new: self.camera_target.new,
         };
 
-        self.player_data.hud_data.life = 0.0;
-        self.player_data.hud_data.speed = 0.0;
-        self.player_data.hud_data.boost_cooldown = 0;
-        self.player_data.hud_data.torpedo_cooldown = 0;
+        p.hud_data.life = 0.0;
+        p.hud_data.speed = 0.0;
+        p.hud_data.boost_cooldown = 0;
+        p.hud_data.torpedo_cooldown = 0;
     }
 }
