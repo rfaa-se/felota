@@ -85,6 +85,10 @@ impl Forge {
                     current: 0,
                     max: 50,
                 },
+                visual: Load {
+                    current: 0,
+                    max: 30,
+                },
             },
         }
     }

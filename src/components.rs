@@ -65,6 +65,7 @@ pub struct Polygon {
 pub struct Targeting {
     pub eid: Option<usize>,
     pub timer: Load,
+    pub visual: Load,
 }
 
 // TODO: move me?

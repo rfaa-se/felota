@@ -25,7 +25,6 @@ const COSMIC_DRAG_ROTATION: f32 = 0.002;
 pub struct Logic {
     dead: BTreeSet<usize>,
     collisions: Vec<(EntityIndex, EntityIndex)>,
-    quadtree: QuadTree,
     commands: Vec<(usize, Command)>,
 }
 
@@ -34,7 +33,6 @@ impl Logic {
         Self {
             dead: BTreeSet::new(),
             collisions: Vec::new(),
-            quadtree: QuadTree::new(COSMOS_WIDTH, COSMOS_HEIGHT),
             commands: Vec::new(),
         }
     }
@@ -45,11 +43,11 @@ impl Logic {
         entities: &mut Entities,
         entity_cmds: &[EntityCommands],
         forge: &Forge,
+        quadtree: &mut QuadTree,
         h: &mut RaylibHandle,
     ) {
         let dead = &mut self.dead;
         let commands = &mut self.commands;
-        let quadtree = &mut self.quadtree;
         let collisions = &mut self.collisions;
 
         update_dead_removal(entities, dead);
@@ -72,10 +70,6 @@ impl Logic {
         update_out_of_bounds(entities, dead);
         update_dead_detection(entities, dead);
         update_dead_notify(entities, dead, bus);
-    }
-
-    pub fn draw(&self, r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>) {
-        self.quadtree.draw(r);
     }
 }
 
@@ -200,6 +194,14 @@ fn update_targeting_target(entities: &mut Entities) {
             },
             None => panic!("wtf target {}", eid),
         };
+
+        // update visuals
+        let targeting = target(entities, eidx);
+        if targeting.visual.current == targeting.visual.max {
+            targeting.visual.current = 0;
+        } else {
+            targeting.visual.current += 1;
+        }
 
         let bounds_target = &match eidx_target {
             Some(eidx_target) => {

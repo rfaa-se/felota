@@ -5,11 +5,12 @@ use raylib::prelude::*;
 use crate::{
     bus::Bus,
     commands::{Command, EntityCommands, Spawn},
-    components::{Centroidable, Generation, Lerpable},
+    components::{Centroidable, Generation},
     constants::{
-        DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT, HUD_SEPARATOR_COLOR, HUD_WIDTH, HUD_X,
-        HUD_Y, RENDER_HEIGHT, RENDER_WIDTH, RESPAWN_TIMER, TICK_SCHEDULED, VIEWPORT_HEIGHT,
-        VIEWPORT_WIDTH,
+        COSMOS_HEIGHT, COSMOS_WIDTH, DEBUG_COLOR, HUD_BACKGROUND_COLOR, HUD_HEIGHT,
+        HUD_SEPARATOR_COLOR, HUD_WIDTH, HUD_X, HUD_Y, MINIMAP_AREA_HEIGHT, MINIMAP_AREA_WIDTH,
+        MINIMAP_HEIGHT, MINIMAP_WIDTH, MINIMAP_X, MINIMAP_Y, RENDER_WIDTH, RESPAWN_TIMER,
+        TICK_SCHEDULED, VIEWPORT_HEIGHT, VIEWPORT_WIDTH,
     },
     entities::{Entities, Entity, EntityIndex},
     forge::Forge,
@@ -17,8 +18,9 @@ use crate::{
     messages::{
         EngineMessage, EngineRequestMessage, LogicMessage, Message, NetMessage, NetRequestMessage,
     },
+    quadtree::QuadTree,
     render::Renderer,
-    utils::generate_targeting_area,
+    utils::minimap_translate,
 };
 
 pub struct Play {
@@ -39,6 +41,7 @@ pub struct Play {
     command_queue: BTreeSet<Command>,
     actions: BTreeSet<Action>,
     render_data: RenderData,
+    quadtree: QuadTree,
 }
 
 struct TickCommands {
@@ -76,6 +79,8 @@ struct HudData {
     torpedo_cooldown: u8,
     target: Option<usize>,
     target_timer: u8,
+    minimap_entities: Vec<(Vector2, f32, Color)>,
+    minimap_xy: Vector2,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -110,6 +115,8 @@ impl Play {
                     torpedo_cooldown: 0,
                     target: None,
                     target_timer: 0,
+                    minimap_entities: Vec::new(),
+                    minimap_xy: Vector2::zero(),
                 },
                 entity_ids: Vec::new(),
                 map: HashMap::new(),
@@ -142,6 +149,7 @@ impl Play {
             commands: Vec::new(),
             command_queue: BTreeSet::new(),
             actions: BTreeSet::new(),
+            quadtree: QuadTree::new(COSMOS_WIDTH, COSMOS_HEIGHT),
         }
     }
 
@@ -180,6 +188,7 @@ impl Play {
             &mut self.entities,
             &tick_commands.commands,
             &self.forge,
+            &mut self.quadtree,
             h,
         );
 
@@ -293,23 +302,7 @@ impl Play {
 
             // TODO: should we really render this here? renderer?
             if self.debug {
-                self.logic.draw(&mut r);
-
-                if let Some(eidx) = self.entities.entity(self.player_data.player_entity_id) {
-                    let centroid = match eidx {
-                        EntityIndex::Triship(idx) => self.entities.triships[idx]
-                            .entity
-                            .body
-                            .state
-                            .lerp(delta)
-                            .centroid(),
-                        _ => panic!("wtf draw targeting area {:?}", eidx),
-                    };
-
-                    let targeting_area = generate_targeting_area(centroid);
-
-                    r.draw_rectangle_lines_ex(targeting_area, 1.0, Color::DARKPURPLE);
-                }
+                self.quadtree.draw(&mut r);
             }
 
             self.renderer.draw(
@@ -327,7 +320,7 @@ impl Play {
             r.draw_text(
                 "stalling",
                 VIEWPORT_WIDTH as i32 / 2 - len / 2,
-                VIEWPORT_HEIGHT / 2,
+                100,
                 10,
                 DEBUG_COLOR,
             );
@@ -338,7 +331,7 @@ impl Play {
             r.draw_text(
                 "paused",
                 RENDER_WIDTH as i32 / 2 - len / 2,
-                RENDER_HEIGHT / 2,
+                100,
                 10,
                 DEBUG_COLOR,
             );
@@ -423,57 +416,87 @@ impl Play {
         r.draw_rectangle(HUD_X, HUD_Y, HUD_WIDTH, HUD_HEIGHT, HUD_BACKGROUND_COLOR);
         r.draw_line(HUD_X, HUD_Y, HUD_X, HUD_Y + HUD_HEIGHT, HUD_SEPARATOR_COLOR);
 
-        let pad = 8;
+        let pad_x = 8;
         let pad_y = 3;
         let data = &self.player_data.hud_data;
 
-        r.draw_text("LFE", HUD_X + pad, HUD_Y + 10 + pad_y * 1, 10, DEBUG_COLOR);
+        r.draw_text(
+            "LIFE",
+            HUD_X + pad_x,
+            HUD_Y + 10 + pad_y * 1,
+            10,
+            DEBUG_COLOR,
+        );
         r.draw_text(
             &format!("{:.2}", data.life),
-            HUD_X + pad + 30,
+            HUD_X + 70 + pad_x,
             HUD_Y + 10 + pad_y * 1,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("SPD", HUD_X + pad, HUD_Y + 20 + pad_y * 2, 10, DEBUG_COLOR);
+        r.draw_text(
+            "SPEED",
+            HUD_X + pad_x,
+            HUD_Y + 20 + pad_y * 2,
+            10,
+            DEBUG_COLOR,
+        );
         r.draw_text(
             &format!("{:.2}", data.speed),
-            HUD_X + pad + 30,
+            HUD_X + 70 + pad_x,
             HUD_Y + 20 + pad_y * 2,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("BST", HUD_X + pad, HUD_Y + 30 + pad_y * 3, 10, DEBUG_COLOR);
+        r.draw_text(
+            "BOOST",
+            HUD_X + pad_x,
+            HUD_Y + 30 + pad_y * 3,
+            10,
+            DEBUG_COLOR,
+        );
         r.draw_text(
             &format!("{} ", data.boost_active),
-            HUD_X + pad + 30,
+            HUD_X + 70 + pad_x,
             HUD_Y + 30 + pad_y * 3,
             10,
             DEBUG_COLOR,
         );
         r.draw_text(
             &format!("{} ", data.boost_cooldown),
-            HUD_X + pad + 50,
+            HUD_X + 70 + pad_x,
             HUD_Y + 30 + pad_y * 3,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("TRP", HUD_X + pad, HUD_Y + 40 + pad_y * 4, 10, DEBUG_COLOR);
+        r.draw_text(
+            "TORPEDO",
+            HUD_X + pad_x,
+            HUD_Y + 40 + pad_y * 4,
+            10,
+            DEBUG_COLOR,
+        );
         r.draw_text(
             &format!("{}", data.torpedo_cooldown),
-            HUD_X + pad + 30,
+            HUD_X + 70 + pad_x,
             HUD_Y + 40 + pad_y * 4,
             10,
             DEBUG_COLOR,
         );
 
-        r.draw_text("TGT", HUD_X + pad, HUD_Y + 50 + pad_y * 5, 10, DEBUG_COLOR);
+        r.draw_text(
+            "TARGET",
+            HUD_X + pad_x,
+            HUD_Y + 50 + pad_y * 5,
+            10,
+            DEBUG_COLOR,
+        );
         r.draw_text(
             &format!("{}", data.target_timer),
-            HUD_X + pad + 30,
+            HUD_X + 70 + pad_x,
             HUD_Y + 50 + pad_y * 5,
             10,
             DEBUG_COLOR,
@@ -483,11 +506,107 @@ impl Play {
                 Some(target) => target.to_string(),
                 None => "-".to_string(),
             },
-            HUD_X + pad + 30,
+            HUD_X + pad_x,
             HUD_Y + 60 + pad_y * 6,
             10,
             DEBUG_COLOR,
         );
+
+        if data.target.is_some() && data.target_timer == 0 {
+            r.draw_text(
+                "LOCKED",
+                HUD_X + pad_x + 70,
+                HUD_Y + 60 + pad_y * 6,
+                10,
+                DEBUG_COLOR,
+            );
+        }
+
+        // render minimap
+        r.draw_rectangle_lines_ex(
+            Rectangle {
+                x: MINIMAP_X as f32 - 1.0,
+                y: MINIMAP_Y as f32 - 1.0,
+                width: MINIMAP_WIDTH as f32 + 2.0,
+                height: MINIMAP_HEIGHT as f32 + 2.0,
+            },
+            1.0,
+            HUD_SEPARATOR_COLOR,
+        );
+
+        r.draw_rectangle_rec(
+            Rectangle {
+                x: MINIMAP_X as f32,
+                y: MINIMAP_Y as f32,
+                width: MINIMAP_WIDTH as f32,
+                height: MINIMAP_HEIGHT as f32,
+            },
+            Color::BLACK,
+        );
+
+        // render entities in minimap
+        for (pos, size, color) in data.minimap_entities.iter() {
+            r.draw_rectangle_v(pos, Vector2::new(*size, *size), color);
+        }
+
+        // render cosmos bounds in minimap
+        let area = Rectangle {
+            x: self.player_data.hud_data.minimap_xy.x - (MINIMAP_AREA_WIDTH / 2) as f32,
+            y: self.player_data.hud_data.minimap_xy.y - (MINIMAP_AREA_HEIGHT / 2) as f32,
+            width: MINIMAP_AREA_WIDTH as f32,
+            height: MINIMAP_AREA_HEIGHT as f32,
+        };
+
+        let ay = area.y;
+        let ax = area.x;
+        let ayh = ay + area.height;
+        let axw = ax + area.width;
+
+        let x_top_left = ax.max(0.0);
+        let y_top_left = ay.max(0.0);
+
+        let x_top_right = axw.min(COSMOS_WIDTH as f32);
+        let y_top_right = ay.max(0.0);
+
+        let x_bottom_left = ax.max(0.0);
+        let y_bottom_left = ayh.min(COSMOS_HEIGHT as f32);
+
+        let x_bottom_right = axw.min(COSMOS_WIDTH as f32);
+        let y_bottom_right = ayh.min(COSMOS_HEIGHT as f32);
+
+        let minimap = self.player_data.hud_data.minimap_xy;
+
+        // left border
+        if ax < x_top_left && axw > x_top_left && y_top_left < y_bottom_left {
+            let start = minimap_translate(x_top_left, y_top_left, minimap);
+            let end = minimap_translate(x_top_left, y_bottom_left, minimap);
+
+            r.draw_line_v(start, end, Color::RED);
+        }
+
+        // right border
+        if axw > x_top_right && ax < x_top_right && y_top_right < y_bottom_right {
+            let start = minimap_translate(x_top_right, y_top_right, minimap);
+            let end = minimap_translate(x_bottom_right, y_bottom_right, minimap);
+
+            r.draw_line_v(start, end, Color::RED);
+        }
+
+        // top border
+        if ay < y_top_left && ayh > y_top_left && x_top_left < x_top_right {
+            let start = minimap_translate(x_top_left, y_top_left, minimap);
+            let end = minimap_translate(x_top_right, y_top_right, minimap);
+
+            r.draw_line_v(start, end, Color::RED);
+        }
+
+        // bottom border
+        if ayh > y_bottom_left && ay < y_bottom_right && x_bottom_left < x_bottom_right {
+            let start = minimap_translate(x_bottom_left, y_bottom_left, minimap);
+            let end = minimap_translate(x_bottom_right, y_bottom_right, minimap);
+
+            r.draw_line_v(start, end, Color::RED);
+        }
     }
 
     fn action(&mut self, bus: &mut Bus, h: &mut RaylibHandle) {
@@ -614,6 +733,57 @@ impl Play {
         } else {
             hud.target_timer = 0;
         }
+
+        hud.minimap_xy = self.camera_target.new;
+        hud.minimap_entities = self
+            .quadtree
+            .get(
+                &Rectangle {
+                    x: hud.minimap_xy.x - (MINIMAP_AREA_WIDTH / 2) as f32,
+                    y: hud.minimap_xy.y - (MINIMAP_AREA_HEIGHT / 2) as f32,
+                    width: MINIMAP_AREA_WIDTH as f32,
+                    height: MINIMAP_AREA_HEIGHT as f32,
+                },
+                &self.entities,
+            )
+            .iter()
+            .filter_map(|eidx_rnd| match eidx_rnd {
+                EntityIndex::Triship(idx) => Some((
+                    self.entities.triships[*idx]
+                        .entity
+                        .body
+                        .state
+                        .new
+                        .shape
+                        .centroid(),
+                    4.0,
+                    if *eidx_rnd == eidx {
+                        Color::WHITESMOKE
+                    } else {
+                        Color::RED
+                    },
+                )),
+                EntityIndex::Torpedo(idx) => Some((
+                    self.entities.torpedoes[*idx]
+                        .entity
+                        .body
+                        .state
+                        .new
+                        .shape
+                        .centroid(),
+                    2.0,
+                    Color::RED,
+                )),
+                _ => None,
+            })
+            .map(|(centroid, size, color)| {
+                (
+                    minimap_translate(centroid.x, centroid.y, hud.minimap_xy),
+                    size,
+                    color,
+                )
+            })
+            .collect();
     }
 
     fn update_render_data(&mut self) {
@@ -623,9 +793,10 @@ impl Play {
         r.target = p.hud_data.target;
         r.target_timer = p.hud_data.target_timer;
 
-        if let Some(eid) = r.target {
-            r.target_eidx = self.entities.entity(eid);
-        }
+        r.target_eidx = match r.target {
+            Some(eid) => self.entities.entity(eid),
+            None => None,
+        };
 
         r.player_entity_id = p.player_entity_id;
         r.player_eidx = self.entities.entity(r.player_entity_id);

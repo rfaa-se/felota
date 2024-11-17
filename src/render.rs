@@ -8,6 +8,7 @@ use crate::{
     entities::{Entities, EntityIndex},
     math::*,
     states::play::RenderData,
+    utils::generate_targeting_area,
 };
 
 pub struct Renderer {}
@@ -32,7 +33,7 @@ impl Renderer {
 
         r.draw_rectangle_lines(0, 0, COSMOS_WIDTH, COSMOS_HEIGHT, Color::RED);
 
-        draw_entities(r, entities, data, viewport, debug, delta);
+        draw_entities(r, entities, viewport, debug, delta);
         draw_visuals(r, entities, data, viewport, debug, delta);
     }
 }
@@ -41,13 +42,11 @@ fn draw_visuals(
     r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
     entities: &Entities,
     data: &RenderData,
-    viewport: Rectangle,
+    _viewport: Rectangle,
     debug: bool,
     delta: f32,
 ) {
-    // draw line towards the target
-    return;
-    // TODO: currently bugs
+    // draw line towards the target and circle around target
     if let (Some(eidx_target), Some(eidx)) = (data.target_eidx, data.player_eidx) {
         let centroid_target = match eidx_target {
             EntityIndex::Triship(idx) => entities.triships[idx]
@@ -59,37 +58,68 @@ fn draw_visuals(
             _ => panic!("wtf centroid target {:?}", eidx_target),
         };
 
-        let centroid = match eidx {
-            EntityIndex::Triship(idx) => entities.triships[idx]
-                .entity
-                .body
-                .state
-                .lerp(delta)
-                .centroid(),
+        let (centroid, timer) = match eidx {
+            EntityIndex::Triship(idx) => {
+                let e = &entities.triships[idx].entity;
+                (
+                    e.body.state.lerp(delta).centroid(),
+                    e.targeting.visual.current,
+                )
+            }
             _ => panic!("wtf centroid {:?}", eidx_target),
         };
 
+        r.draw_circle_lines(
+            centroid_target.x as i32,
+            centroid_target.y as i32,
+            50.0 + data.target_timer as f32,
+            Color::DARKGRAY,
+        );
+
         let cen = centroid_target - centroid;
+
+        // don't draw line if we're too close
+        if cen.length_sqr() < 30000.0 {
+            return;
+        }
+
         let rot = cen.normalized();
 
-        let start = centroid + rot * 40.0;
+        let start = centroid + rot * (60.0 + timer as f32);
         let end = start + rot * 25.0;
 
-        r.draw_line_v(start, end, Color::RED);
+        r.draw_line_v(start, end, Color::DARKGRAY);
+    }
+
+    if debug {
+        if let Some(eidx) = data.player_eidx {
+            let centroid = match eidx {
+                EntityIndex::Triship(idx) => entities.triships[idx]
+                    .entity
+                    .body
+                    .state
+                    .lerp(delta)
+                    .centroid(),
+                _ => panic!("wtf draw targeting area {:?}", eidx),
+            };
+
+            let targeting_area = generate_targeting_area(centroid);
+
+            r.draw_rectangle_lines_ex(targeting_area, 1.0, Color::DARKPURPLE);
+        }
     }
 }
 
 fn draw_entities(
     r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
     entities: &Entities,
-    data: &RenderData,
     viewport: Rectangle,
     debug: bool,
     delta: f32,
 ) {
     draw_stars(r, entities, viewport, delta);
     draw_exhausts(r, entities, viewport, delta);
-    draw_triships(r, entities, data, viewport, debug, delta);
+    draw_triships(r, entities, viewport, debug, delta);
     draw_explosions(r, entities, viewport, delta);
     draw_projectiles(r, entities, viewport, delta);
     draw_torpedoes(r, entities, viewport, debug, delta);
@@ -297,7 +327,6 @@ fn draw_exhausts(
 fn draw_triships(
     r: &mut RaylibMode2D<RaylibTextureMode<RaylibDrawHandle>>,
     entities: &Entities,
-    data: &RenderData,
     viewport: Rectangle,
     debug: bool,
     delta: f32,
@@ -322,17 +351,6 @@ fn draw_triships(
         };
 
         r.draw_triangle_lines(ent.v1, ent.v2, ent.v3, triship.entity.body.color);
-
-        if let Some(target) = data.target {
-            if target == triship.id {
-                r.draw_circle_lines(
-                    ori.x as i32,
-                    ori.y as i32,
-                    40.0 + data.target_timer as f32,
-                    Color::DARKRED,
-                );
-            }
-        }
 
         if !debug {
             continue;
